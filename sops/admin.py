@@ -1,0 +1,15 @@
+from django.contrib import admin
+from .models import SOP, SOPView
+from learning.models import RoleAssignment  # add to imports
+
+
+    
+@admin.register(SOP)
+class SOPAdmin(admin.ModelAdmin):
+    list_display=("code","title","media_type","version_major","version_minor","status","org","published_at")
+    list_filter=("status","org","media_type")
+    search_fields=("code","title")
+
+  
+admin.site.register(SOPView)
+    
