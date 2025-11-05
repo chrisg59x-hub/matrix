@@ -6,14 +6,14 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write   # allow commits/pushes with GITHUB_TOKEN
+  contents: write
 
 concurrency:
   group: context-refresh-${{ github.ref }}
   cancel-in-progress: false
 
 env:
-  DJANGO_SETTINGS_MODULE: matrix.settings   # <-- adjust if your settings module differs
+  DJANGO_SETTINGS_MODULE: matrix.settings   # <- change if your settings module differs
   PYTHONUNBUFFERED: 1
 
 jobs:
@@ -37,20 +37,17 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            # Minimal deps if you don't have a requirements.txt
             pip install "Django>=4.2" djangorestframework drf-spectacular ruff flake8
           fi
 
-      # ---- LINT (fast fail; keep your code clean) ----
+      # ---- LINT ----
       - name: Ruff (lint)
         run: |
-          ruff --version
           ruff check . --output-format=github
 
       - name: Flake8 (lint)
         run: |
           flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
-          # broader style pass (non-fatal)
           flake8 . --exit-zero --max-complexity=12 --max-line-length=120 --statistics
 
       # ---- REFRESH CONTEXT (non-blocking) ----
@@ -62,18 +59,39 @@ jobs:
             echo "scripts/cx_refresh.py not found; skipping."
           fi
 
-      # ---- OPENAPI GENERATION (drf-spectacular) ----
+      # ---- OPENAPI (drf-spectacular) ----
       - name: Generate OpenAPI (YAML + JSON)
         run: |
           mkdir -p context
           if [ -f manage.py ]; then
-            # YAML
             python manage.py spectacular --file context/openapi.yaml --format yaml || true
-            # JSON
             python manage.py spectacular --file context/openapi.json --format json || true
           else
             echo "manage.py not found; skipping schema generation."
           fi
+
+      # ---- ReDoc HTML (pretty API docs) ----
+      - name: Build ReDoc page
+        run: |
+          mkdir -p docs
+          cat > docs/api.html <<'HTML'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8"/>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Matrix SOPRPG API</title>
+              <style>body{margin:0} .topbar{position:fixed;z-index:10;top:0;left:0;right:0;height:48px;display:flex;align-items:center;padding:0 14px;background:#0b1021;color:#fff;font-family:sans-serif} .wrap{padding-top:48px}</style>
+              <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+            </head>
+            <body>
+              <div class="topbar">Matrix SOPRPG API Docs</div>
+              <div class="wrap">
+                <redoc spec-url="../context/openapi.json"></redoc>
+              </div>
+            </body>
+          </html>
+          HTML
 
       # ---- STAGE + COMMIT ANY CHANGES ----
       - name: Stage context updates
@@ -82,6 +100,7 @@ jobs:
           git add context/02_MODULE_SUMMARIES || true
           git add context/07_SESSIONS || true
           git add context/openapi.yaml context/openapi.json || true
+          git add docs/api.html || true
 
       - name: Commit if changed
         id: commit
@@ -91,16 +110,15 @@ jobs:
           else
             git config user.name  "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
-            git commit -m "CI: refresh context & OpenAPI [skip ci]"
+            git commit -m "CI: refresh context, OpenAPI & ReDoc [skip ci]"
             echo "changed=true" >> $GITHUB_OUTPUT
           fi
 
       - name: Push
-      # avoid pushing on PRs from forks
         if: steps.commit.outputs.changed == 'true' && github.event_name != 'pull_request'
         run: git push
 
-      # ---- ARTIFACT: attach OpenAPI outputs ----
+      # ---- ARTIFACTS ----
       - name: Upload OpenAPI artifact
         if: always()
         uses: actions/upload-artifact@v4
@@ -109,4 +127,12 @@ jobs:
           path: |
             context/openapi.yaml
             context/openapi.json
+          if-no-files-found: warn
+
+      - name: Upload ReDoc artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redoc-html
+          path: docs/api.html
           if-no-files-found: warn
