@@ -1,0 +1,64 @@
+name: Context Refresh
+on:
+  push:
+    branches: [ main, master, dev, "**/feature/**" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write   # required to push commits with GITHUB_TOKEN
+
+concurrency:
+  group: context-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.x'
+
+      # If you need deps, uncomment and add your requirements file
+      # - name: Install dependencies
+      #   run: |
+      #     pip install -U pip
+      #     if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+
+      - name: Refresh context (non-blocking)
+        run: |
+          if [ -f scripts/cx_refresh.py ]; then
+            python scripts/cx_refresh.py || true
+          else
+            echo "scripts/cx_refresh.py not found; skipping."
+          fi
+
+      - name: Stage context updates
+        run: |
+          git add context/00_MASTER_CONTEXT.md || true
+          git add context/02_MODULE_SUMMARIES || true
+          git add context/07_SESSIONS || true
+
+      - name: Commit if any changes
+        id: commit
+        run: |
+          if git diff --cached --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "CI: refresh context [skip ci]"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push
+        if: steps.commit.outputs.changed == 'true'
+        run: |
+          git push
