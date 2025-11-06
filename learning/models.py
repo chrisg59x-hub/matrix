@@ -1,9 +1,9 @@
 # learning/models.py
 import uuid
-import math
+# import math
 from django.db import models
 from django.conf import settings
-from django.utils import timezone
+# from django.utils import timezone
 
 QUESTION_TYPES = [("single","single"),("multi","multi"),("truefalse","truefalse")]
 
