@@ -37,8 +37,7 @@ class Command(BaseCommand):
             defaults={"email": "manager@matrix.local", "org": org, "biz_role": "manager", "is_staff": True},
         )
         if not manager.has_usable_password():
-            manager.set_password("manager123"); 
-            manager.save()
+            manager.set_password("manager123"), manager.save()
 
         employee, _ = User.objects.get_or_create(
             username="employee",
