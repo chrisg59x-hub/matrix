@@ -1,0 +1,23 @@
+name: Export Code
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+
+jobs:
+  bundle:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { fetch-depth: 0 }
+      - name: Remove large/secret folders (adjust as needed)
+        run: |
+          rm -rf .git .github .venv venv node_modules dist build
+      - name: Create zip
+        run: |
+          zip -r repo_bundle.zip .
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: repo-bundle
+          path: repo_bundle.zip
