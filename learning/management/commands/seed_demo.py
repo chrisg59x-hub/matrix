@@ -1,22 +1,32 @@
 # learning/management/commands/seed_demo.py
 # import itertools
 from datetime import timedelta
-from django.core.management.base import BaseCommand
-from django.contrib.auth import get_user_model
-from django.utils import timezone
-from learning.models import Department, Team, TeamMember, RoleAssignment
-
 
 from accounts.models import Org
-from learning.models import (
-    JobRole, Skill, RoleSkill, Module, ModuleAttempt, XPEvent, SupervisorSignoff,
-    LevelDef, Badge, UserBadge, xp_for_next_level
-)
+from django.contrib.auth import get_user_model
+from django.core.management.base import BaseCommand
+from django.utils import timezone
 from sops.models import SOP
 
+from learning.models import (
+    Badge,
+    Department,
+    JobRole,
+    LevelDef,
+    Module,
+    ModuleAttempt,
+    RoleAssignment,
+    RoleSkill,
+    Skill,
+    SupervisorSignoff,
+    Team,
+    TeamMember,
+    UserBadge,
+    XPEvent,
+    xp_for_next_level,
+)
+
 User = get_user_model()
-
-
 
 
 def cumulative_levels(max_level=10):
@@ -70,35 +80,63 @@ class Command(BaseCommand):
         # --- SOPs -----------------------------------------------------------
         now = timezone.now()
         sop1, _ = SOP.objects.get_or_create(
-            org=org, code="SOP-WH-001", title="Safe Manual Lifting",
-            defaults={"version_major":1, "version_minor":0, "status":"published",
-                      "content":{"steps":["Plan the lift","Bend knees","Keep back straight"]},
-                      "published_at": now - timedelta(days=10), "published_by": manager}
+            org=org,
+            code="SOP-WH-001",
+            title="Safe Manual Lifting",
+            defaults={
+                "version_major": 1,
+                "version_minor": 0,
+                "status": "published",
+                "content": {"steps": ["Plan the lift", "Bend knees", "Keep back straight"]},
+                "published_at": now - timedelta(days=10),
+                "published_by": manager,
+            },
         )
         sop2, _ = SOP.objects.get_or_create(
-            org=org, code="SOP-WH-002", title="Order Picking Procedure",
-            defaults={"version_major":1, "version_minor":0, "status":"published",
-                      "content":{"steps":["Scan location","Confirm item","Place on pallet"]},
-                      "published_at": now - timedelta(days=5), "published_by": manager}
+            org=org,
+            code="SOP-WH-002",
+            title="Order Picking Procedure",
+            defaults={
+                "version_major": 1,
+                "version_minor": 0,
+                "status": "published",
+                "content": {"steps": ["Scan location", "Confirm item", "Place on pallet"]},
+                "published_at": now - timedelta(days=5),
+                "published_by": manager,
+            },
         )
 
         # --- Modules --------------------------------------------------------
-        mod1, _ = Module.objects.get_or_create(org=org, skill=safety, sop=sop1,
-                                               title="Manual Handling Basics",
-                                               defaults={"difficulty":2,"passing_score":80,"active":True})
-        mod2, _ = Module.objects.get_or_create(org=org, skill=picking, sop=sop2,
-                                               title="Order Picking Refresher",
-                                               defaults={"difficulty":3,"passing_score":85,"active":True})
+        mod1, _ = Module.objects.get_or_create(
+            org=org,
+            skill=safety,
+            sop=sop1,
+            title="Manual Handling Basics",
+            defaults={"difficulty": 2, "passing_score": 80, "active": True},
+        )
+        mod2, _ = Module.objects.get_or_create(
+            org=org,
+            skill=picking,
+            sop=sop2,
+            title="Order Picking Refresher",
+            defaults={"difficulty": 3, "passing_score": 85, "active": True},
+        )
 
         # --- Attempts & XP (employee) --------------------------------------
         ModuleAttempt.objects.get_or_create(
-            user=employee, module=mod1, passed=True, score=88, completed_at=now - timedelta(days=2),
-            defaults={"answers": {"q1":"A","q2":"B"}}
+            user=employee,
+            module=mod1,
+            passed=True,
+            score=88,
+            completed_at=now - timedelta(days=2),
+            defaults={"answers": {"q1": "A", "q2": "B"}},
         )
-        XPEvent.objects.get_or_create(user=employee, org=org, skill=safety,
-                                      source="module_pass", amount=120, meta={"module": mod1.title})
-        XPEvent.objects.get_or_create(user=employee, org=org, skill=picking,
-                                      source="module_pass", amount=160, meta={"module": mod2.title})
+        XPEvent.objects.get_or_create(
+            user=employee, org=org, skill=safety, source="module_pass", amount=120, meta={"module": mod1.title}
+        )
+        XPEvent.objects.get_or_create(
+            user=employee, org=org, skill=picking, source="module_pass", amount=160, meta={"module": mod2.title}
+        )
 
         SupervisorSignoff.objects.get_or_create(
             user=employee, skill=safety, supervisor=manager, note="Observed correct technique"
@@ -115,18 +153,42 @@ class Command(BaseCommand):
         Badge.objects.filter(org=org).delete()
 
         badges = {
-            "RISING_STAR": dict(code="RISING_STAR", name="Rising Star",
-                                description="Reached 300 overall XP.",
-                                rule_type="overall_xp_at_least", value=300, skill=None, icon="⭐"),
-            "SAFETY_CHAMP": dict(code="SAFETY_CHAMP", name="Safety Champion",
-                                 description="300+ XP in Manual Handling.",
-                                 rule_type="skill_xp_at_least", value=300, skill=safety, icon="🛡️"),
-            "EXPERT_PICKER": dict(code="EXPERT_PICKER", name="Expert Picker",
-                                  description="300+ XP in Order Picking.",
-                                  rule_type="skill_xp_at_least", value=300, skill=picking, icon="📦"),
-            "MENTOR": dict(code="MENTOR", name="Mentor",
-                           description="Completed at least one supervisor sign-off.",
-                           rule_type="signoffs_at_least", value=1, skill=None, icon="🎓"),
+            "RISING_STAR": dict(
+                code="RISING_STAR",
+                name="Rising Star",
+                description="Reached 300 overall XP.",
+                rule_type="overall_xp_at_least",
+                value=300,
+                skill=None,
+                icon="⭐",
+            ),
+            "SAFETY_CHAMP": dict(
+                code="SAFETY_CHAMP",
+                name="Safety Champion",
+                description="300+ XP in Manual Handling.",
+                rule_type="skill_xp_at_least",
+                value=300,
+                skill=safety,
+                icon="🛡️",
+            ),
+            "EXPERT_PICKER": dict(
+                code="EXPERT_PICKER",
+                name="Expert Picker",
+                description="300+ XP in Order Picking.",
+                rule_type="skill_xp_at_least",
+                value=300,
+                skill=picking,
+                icon="📦",
+            ),
+            "MENTOR": dict(
+                code="MENTOR",
+                name="Mentor",
+                description="Completed at least one supervisor sign-off.",
+                rule_type="signoffs_at_least",
+                value=1,
+                skill=None,
+                icon="🎓",
+            ),
         }
 
         created_badges = []
@@ -138,6 +200,7 @@ class Command(BaseCommand):
         # --- Auto-award badges to employee ---------------------------------
         # Compute totals
         from django.db.models import Sum
+
         totals = XPEvent.objects.filter(user=employee).aggregate(total=Sum("amount"))
         overall_xp = totals["total"] or 0
         skill_xp = {
@@ -155,9 +218,9 @@ class Command(BaseCommand):
             if badge.rule_type == "overall_xp_at_least":
                 ok = overall_xp >= badge.value
             elif badge.rule_type == "skill_xp_at_least" and badge.skill_id:
-                ok = (skill_xp.get(badge.skill_id, 0) >= badge.value)
+                ok = skill_xp.get(badge.skill_id, 0) >= badge.value
             elif badge.rule_type == "signoffs_at_least":
-                ok = (signoffs >= badge.value)
+                ok = signoffs >= badge.value
 
             if ok and not has_badge(badge):
                 UserBadge.objects.create(user=employee, badge=badge, meta={"awarded_by": "seed_demo"})

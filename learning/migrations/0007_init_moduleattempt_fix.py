@@ -1,9 +1,9 @@
+import django.utils.timezone
 from django.conf import settings
 from django.db import migrations, models
-import django.utils.timezone
+
 
 class Migration(migrations.Migration):
-
     dependencies = [
         ("learning", "0006_remove_moduleattempt_answers_and_more"),  # adjust if your previous file differs
         ("accounts", "0001_initial"),
@@ -22,7 +22,8 @@ class Migration(migrations.Migration):
             name="user",
             field=models.ForeignKey(
                 related_name="module_attempts",
-                null=True, blank=True,
+                null=True,
+                blank=True,
                 on_delete=models.deletion.CASCADE,
                 to=settings.AUTH_USER_MODEL,
             ),

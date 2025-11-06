@@ -5,25 +5,38 @@ from django.db import migrations, models
 
 
 class Migration(migrations.Migration):
-
     dependencies = [
-        ('learning', '0004_department_team_teammember'),
+        ("learning", "0004_department_team_teammember"),
     ]
 
     operations = [
         migrations.AddField(
-            model_name='badge',
-            name='department',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='learning.department'),
+            model_name="badge",
+            name="department",
+            field=models.ForeignKey(
+                blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="learning.department"
+            ),
         ),
         migrations.AddField(
-            model_name='badge',
-            name='team',
-            field=models.ForeignKey(blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to='learning.team'),
+            model_name="badge",
+            name="team",
+            field=models.ForeignKey(
+                blank=True, null=True, on_delete=django.db.models.deletion.CASCADE, to="learning.team"
+            ),
         ),
         migrations.AlterField(
-            model_name='badge',
-            name='rule_type',
-            field=models.CharField(choices=[('overall_xp_at_least', 'overall_xp_at_least'), ('skill_xp_at_least', 'skill_xp_at_least'), ('signoffs_at_least', 'signoffs_at_least'), ('team_total_xp_at_least', 'team_total_xp_at_least'), ('department_total_xp_at_least', 'department_total_xp_at_least'), ('team_member_count_with_xp_at_least', 'team_member_count_with_xp_at_least')], max_length=40),
+            model_name="badge",
+            name="rule_type",
+            field=models.CharField(
+                choices=[
+                    ("overall_xp_at_least", "overall_xp_at_least"),
+                    ("skill_xp_at_least", "skill_xp_at_least"),
+                    ("signoffs_at_least", "signoffs_at_least"),
+                    ("team_total_xp_at_least", "team_total_xp_at_least"),
+                    ("department_total_xp_at_least", "department_total_xp_at_least"),
+                    ("team_member_count_with_xp_at_least", "team_member_count_with_xp_at_least"),
+                ],
+                max_length=40,
+            ),
         ),
     ]

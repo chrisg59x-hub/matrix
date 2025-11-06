@@ -3,46 +3,72 @@
 # 1) Core imports
 # -----------------------------------------------------------------------------
 import random
-from datetime import timedelta
-
-from django.db.models import Sum
-from django.utils import timezone
-from django.shortcuts import get_object_or_404
-
-from rest_framework import viewsets, response, permissions, status, decorators
-from rest_framework.exceptions import ValidationError, PermissionDenied
-from drf_spectacular.utils import extend_schema
 
 # -----------------------------------------------------------------------------
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from accounts.models import Org, User
-from sops.models import SOP, SOPView
+from django.db.models import Sum
+from django.shortcuts import get_object_or_404
+from django.utils import timezone
+from drf_spectacular.utils import extend_schema
 from learning.models import (
-    JobRole, Skill, RoleSkill, Module, ModuleAttempt,
-    XPEvent, SupervisorSignoff, RecertRequirement, LevelDef,
-    Badge, UserBadge, Department, Team, TeamMember, RoleAssignment,
+    Badge,
+    Department,
+    JobRole,
+    LevelDef,
+    Module,
+    ModuleAttempt,
+    RecertRequirement,
+    RoleAssignment,
+    RoleSkill,
+    Skill,
+    SupervisorSignoff,
+    Team,
+    TeamMember,
+    UserBadge,
+    XPEvent,
 )
-
-# -----------------------------------------------------------------------------
-# 3) Serializer imports
-# -----------------------------------------------------------------------------
-from .serializers import (
-    OrgSerializer, UserSerializer, SOPSerializer, SOPViewSerializer,
-    SkillSerializer, JobRoleSerializer, RoleSkillSerializer,
-    ModuleSerializer, ModuleAttemptSerializer, XPEventSerializer,
-    SupervisorSignoffSerializer, RecertRequirementSerializer,
-    LevelDefSerializer, BadgeSerializer, UserBadgeSerializer,
-    DepartmentSerializer, TeamSerializer, TeamMemberSerializer,
-    RoleAssignmentSerializer, ProgressSerializer, LeaderboardEntrySerializer,
-    WhoAmISerializer, StartAttemptSerializer, SubmitAttemptRequestSerializer,
-    QuestionPublicSerializer,
-)
+from rest_framework import decorators, permissions, response, status, viewsets
+from rest_framework.exceptions import PermissionDenied, ValidationError
+from sops.models import SOP, SOPView
 
 # -----------------------------------------------------------------------------
 # 4) Permissions
 # -----------------------------------------------------------------------------
 from .permissions import IsManagerForWrites
+
+# -----------------------------------------------------------------------------
+# 3) Serializer imports
+# -----------------------------------------------------------------------------
+from .serializers import (
+    BadgeSerializer,
+    DepartmentSerializer,
+    JobRoleSerializer,
+    LeaderboardEntrySerializer,
+    LevelDefSerializer,
+    ModuleAttemptSerializer,
+    ModuleSerializer,
+    OrgSerializer,
+    ProgressSerializer,
+    QuestionPublicSerializer,
+    RecertRequirementSerializer,
+    RoleAssignmentSerializer,
+    RoleSkillSerializer,
+    SkillSerializer,
+    SOPSerializer,
+    SOPViewSerializer,
+    StartAttemptSerializer,
+    SubmitAttemptRequestSerializer,
+    SupervisorSignoffSerializer,
+    TeamMemberSerializer,
+    TeamSerializer,
+    UserBadgeSerializer,
+    UserSerializer,
+    WhoAmISerializer,
+    XPEventSerializer,
+)
+
 
 # -----------------------------------------------------------------------------
 # 5) Basic CRUD ViewSets (standard DRF)
@@ -160,6 +186,7 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = RoleAssignmentSerializer
     permission_classes = [IsManagerForWrites]
 
+
 # -----------------------------------------------------------------------------
 # 6) SOP Media Heartbeat & Completion
 # -----------------------------------------------------------------------------
@@ -210,9 +237,7 @@ def my_progress(request):
     xp_next = (next_level * 10) ** 2
     xp_to_next = xp_next - total_xp
 
-    skills = (XPEvent.objects.filter(user=user)
-              .values("skill_id", "skill__name")
-              .annotate(xp=Sum("amount")))
+    skills = XPEvent.objects.filter(user=user).values("skill_id", "skill__name").annotate(xp=Sum("amount"))
 
     skills_data = [{"skill_id": s["skill_id"], "skill_name": s["skill__name"], "xp": s["xp"]} for s in skills]
     payload = {
@@ -220,7 +245,7 @@ def my_progress(request):
         "overall_level": overall_level,
         "next_level": next_level,
         "xp_to_next": xp_to_next,
-        "skills": skills_data
+        "skills": skills_data,
     }
     return response.Response(payload)
 
@@ -231,17 +256,24 @@ def my_progress(request):
 def leaderboard(request):
     """Simple org leaderboard by total XP."""
     org_id = getattr(request.user, "org_id", None)
-    qs = XPEvent.objects.filter(org_id=org_id).values("user_id", "user__username").annotate(overall_xp=Sum("amount")).order_by("-overall_xp")
+    qs = (
+        XPEvent.objects.filter(org_id=org_id)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
 
     results = []
     for rank, row in enumerate(qs, start=1):
-        results.append({
-            "rank": rank,
-            "user_id": row["user_id"],
-            "username": row["user__username"],
-            "overall_xp": row["overall_xp"] or 0,
-            "level": level_from_total_xp(row["overall_xp"]),
-        })
+        results.append(
+            {
+                "rank": rank,
+                "user_id": row["user_id"],
+                "username": row["user__username"],
+                "overall_xp": row["overall_xp"] or 0,
+                "level": level_from_total_xp(row["overall_xp"]),
+            }
+        )
     return response.Response(results)
 
 
@@ -253,6 +285,7 @@ def leaderboard(request):
 #       submit_started_attempt() remain unchanged — keep them here below.
 #       Include @extend_schema annotations as shown earlier.
 
+
 # -----------------------------------------------------------------------------
 # 9) WhoAmI endpoint for Swagger banner / UI
 # -----------------------------------------------------------------------------
@@ -261,14 +294,17 @@ def leaderboard(request):
 @decorators.permission_classes([permissions.IsAuthenticated])
 def whoami(request):
     """Return logged-in user's username and biz_role."""
-    return response.Response({
-        "username": request.user.username,
-        "biz_role": getattr(request.user, "biz_role", None),
-    })
-    
+    return response.Response(
+        {
+            "username": request.user.username,
+            "biz_role": getattr(request.user, "biz_role", None),
+        }
+    )
+
+
 @extend_schema(
     responses=StartAttemptSerializer,
-    description="Start a quiz attempt: backend selects & shuffles questions/choices. Returns attempt_id and the served questions."
+    description="Start a quiz attempt: backend selects & shuffles questions/choices. Returns attempt_id and the served questions.",
 )
 @decorators.api_view(["POST"])
 @decorators.permission_classes([permissions.IsAuthenticated])
@@ -336,19 +372,31 @@ def start_module_attempt(request, module_id: str):
 
 @extend_schema(
     request=SubmitAttemptRequestSerializer,
-    responses={"200": {"type": "object", "properties": {
-        "attempt_id": {"type": "string", "format": "uuid"},
-        "percent": {"type": "integer"},
-        "passed": {"type": "boolean"},
-        "score": {"type": "number"},
-        "max_score": {"type": "number"},
-        "feedback": {"type": "array", "items": {"type": "object", "properties": {
-            "question_id": {"type": "string", "format": "uuid"},
-            "earned": {"type": "number"},
-            "max": {"type": "number"},
-            "correct": {"type": "boolean"},
-            "message": {"type": "string"},
-        }}}}}}
+    responses={
+        "200": {
+            "type": "object",
+            "properties": {
+                "attempt_id": {"type": "string", "format": "uuid"},
+                "percent": {"type": "integer"},
+                "passed": {"type": "boolean"},
+                "score": {"type": "number"},
+                "max_score": {"type": "number"},
+                "feedback": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question_id": {"type": "string", "format": "uuid"},
+                            "earned": {"type": "number"},
+                            "max": {"type": "number"},
+                            "correct": {"type": "boolean"},
+                            "message": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        }
+    },
 )
 @decorators.api_view(["POST"])
 @decorators.permission_classes([permissions.IsAuthenticated])
@@ -426,10 +474,10 @@ def submit_started_attempt(request, attempt_id: str):
             else:
                 fraction = sel_correct / total_correct
                 if module.negative_marking:
-                    fraction -= (sel_wrong / max(1, len(wrong_ids)))
+                    fraction -= sel_wrong / max(1, len(wrong_ids))
                 fraction = max(0.0, min(1.0, fraction))
                 earned = round(max_pts * fraction, 2)
-                correct_flag = (fraction == 1.0 and sel_wrong == 0)
+                correct_flag = fraction == 1.0 and sel_wrong == 0
 
                 if sel_wrong and module.negative_marking:
                     msg = "Some incorrect choices selected."
@@ -441,13 +489,15 @@ def submit_started_attempt(request, attempt_id: str):
                     msg = f"{msg} {q.explanation}"
 
         total_earned += earned
-        feedback.append({
-            "question_id": qid,
-            "earned": earned,
-            "max": max_pts,
-            "correct": correct_flag,
-            "message": msg,
-        })
+        feedback.append(
+            {
+                "question_id": qid,
+                "earned": earned,
+                "max": max_pts,
+                "correct": correct_flag,
+                "message": msg,
+            }
+        )
 
     percent = int(round((total_earned / total_max) * 100)) if total_max > 0 else 0
     passed = percent >= (module.pass_mark or module.passing_score)
@@ -459,11 +509,14 @@ def submit_started_attempt(request, attempt_id: str):
     attempt.answers = {qid: list(chosen_map.get(qid, set())) for qid in presented_ids}
     attempt.save()
 
-    return response.Response({
-        "attempt_id": str(attempt.id),
-        "percent": percent,
-        "passed": passed,
-        "score": total_earned,
-        "max_score": total_max,
-        "feedback": feedback,
-    }, status=status.HTTP_200_OK)
+    return response.Response(
+        {
+            "attempt_id": str(attempt.id),
+            "percent": percent,
+            "passed": passed,
+            "score": total_earned,
+            "max_score": total_max,
+            "feedback": feedback,
+        },
+        status=status.HTTP_200_OK,
+    )

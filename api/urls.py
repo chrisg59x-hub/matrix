@@ -1,19 +1,37 @@
-from django.urls import path, include
+from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 # Import ViewSets & function views
 from .views import (
+    BadgeViewSet,
+    DepartmentViewSet,
+    JobRoleViewSet,
+    LevelDefViewSet,
+    ModuleAttemptViewSet,
+    ModuleViewSet,
     # --- ViewSets ---
-    OrgViewSet, UserViewSet, SOPViewSet, SkillViewSet, JobRoleViewSet, RoleSkillViewSet,
-    ModuleViewSet, ModuleAttemptViewSet, XPEventViewSet, SupervisorSignoffViewSet,
-    RecertRequirementViewSet, LevelDefViewSet, BadgeViewSet, UserBadgeViewSet,
-    DepartmentViewSet, TeamViewSet, TeamMemberViewSet, RoleAssignmentViewSet,
+    OrgViewSet,
+    RecertRequirementViewSet,
+    RoleAssignmentViewSet,
+    RoleSkillViewSet,
+    SkillViewSet,
+    SOPViewSet,
+    SupervisorSignoffViewSet,
+    TeamMemberViewSet,
+    TeamViewSet,
+    UserBadgeViewSet,
+    UserViewSet,
+    XPEventViewSet,
+    leaderboard,
     # --- Function endpoints (core) ---
-    my_progress, leaderboard, whoami, sop_view_heartbeat,
-    start_module_attempt, submit_started_attempt,
+    my_progress,
+    sop_view_heartbeat,
+    start_module_attempt,
+    submit_started_attempt,
     # --- Optional extras (leave commented if not implemented) ---
     # leaderboard_csv, xp_events_csv,
     # skill_leaderboard, role_leaderboard, org_leaderboard_by_group,
+    whoami,
 )
 
 router = DefaultRouter()
@@ -41,24 +59,19 @@ router.register(r"role-assignments", RoleAssignmentViewSet)
 urlpatterns = [
     # Router-driven endpoints
     path("", include(router.urls)),
-
     # --- Core function endpoints ---
-    path("me/progress/", my_progress),                              # current user's XP/level/skills
-    path("me/whoami/", whoami),                                     # username + role (used by Swagger banner)
-    path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),           # media viewed heartbeat/complete
-
+    path("me/progress/", my_progress),  # current user's XP/level/skills
+    path("me/whoami/", whoami),  # username + role (used by Swagger banner)
+    path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),  # media viewed heartbeat/complete
     # Start → Submit quiz flow (randomised/shuffled/negative marking)
     path("modules/<uuid:module_id>/start/", start_module_attempt),  # returns attempt_id + served questions
     path("attempts/<uuid:attempt_id>/submit/", submit_started_attempt),
-
     # Simple org leaderboard
     path("leaderboard/", leaderboard),
-
     # --- Optional extras (uncomment if you added these views) ---
     # CSV exports:
     # path("leaderboard.csv", leaderboard_csv),
     # path("xp/export.csv", xp_events_csv),
-
     # Extra leaderboards:
     # path("leaderboard/skill/<uuid:skill_id>/", skill_leaderboard),
     # path("leaderboard/role/<uuid:role_id>/", role_leaderboard),

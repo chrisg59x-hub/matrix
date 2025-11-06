@@ -8,26 +8,39 @@
 # 5) request/response schema serializers (non-model)
 # -----------------------------------------------------------------------------
 
-from rest_framework import serializers
-
 # --- Accounts ----------------------------------------------------------------
 from accounts.models import Org, User
 
-# --- SOPs (media + viewing) --------------------------------------------------
-from sops.models import SOP, SOPView
-
 # --- Learning (roles/skills/modules/quizzes/xp) ------------------------------
 from learning.models import (
-    JobRole, Skill, RoleSkill, Module, Question, Choice,
-    ModuleAttempt, XPEvent, SupervisorSignoff, RecertRequirement,
-    LevelDef, Badge, UserBadge,
-    Department, Team, TeamMember, RoleAssignment,
+    Badge,
+    Choice,
+    Department,
+    JobRole,
+    LevelDef,
+    Module,
+    ModuleAttempt,
+    Question,
+    RecertRequirement,
+    RoleAssignment,
+    RoleSkill,
+    Skill,
+    SupervisorSignoff,
+    Team,
+    TeamMember,
+    UserBadge,
+    XPEvent,
 )
+from rest_framework import serializers
+
+# --- SOPs (media + viewing) --------------------------------------------------
+from sops.models import SOP, SOPView
 
 # -----------------------------------------------------------------------------
 # 3) SIMPLE / FLAT MODEL SERIALIZERS
 #    Keep these minimal; add nested fields only where it won’t cause recursion.
 # -----------------------------------------------------------------------------
+
 
 class OrgSerializer(serializers.ModelSerializer):
     class Meta:
@@ -45,6 +58,7 @@ class UserSerializer(serializers.ModelSerializer):
 
 class SOPSerializer(serializers.ModelSerializer):
     """Includes media fields for video/pdf/pptx/link."""
+
     class Meta:
         model = SOP
         fields = "__all__"
@@ -53,8 +67,7 @@ class SOPSerializer(serializers.ModelSerializer):
 class SOPViewSerializer(serializers.ModelSerializer):
     class Meta:
         model = SOPView
-        fields = ("id", "sop", "user", "seconds_viewed", "pages_viewed", "progress",
-                  "completed", "last_heartbeat")
+        fields = ("id", "sop", "user", "seconds_viewed", "pages_viewed", "progress", "completed", "last_heartbeat")
         read_only_fields = ("id", "user", "last_heartbeat")
 
 
@@ -81,11 +94,21 @@ class RoleSkillSerializer(serializers.ModelSerializer):
 
 class ModuleAttemptSerializer(serializers.ModelSerializer):
     module_title = serializers.CharField(source="module.title", read_only=True)
+
     class Meta:
         model = ModuleAttempt
-        fields = ("id", "user", "module", "module_title",
-                  "completed_at", "score", "passed", "answers",
-                  "presented_questions", "choice_order")
+        fields = (
+            "id",
+            "user",
+            "module",
+            "module_title",
+            "completed_at",
+            "score",
+            "passed",
+            "answers",
+            "presented_questions",
+            "choice_order",
+        )
 
 
 class XPEventSerializer(serializers.ModelSerializer):
@@ -94,8 +117,7 @@ class XPEventSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = XPEvent
-        fields = ("id", "created_at", "org", "user", "username",
-                  "skill", "skill_name", "source", "amount", "meta")
+        fields = ("id", "created_at", "org", "user", "username", "skill", "skill_name", "source", "amount", "meta")
 
 
 class SupervisorSignoffSerializer(serializers.ModelSerializer):
@@ -105,8 +127,17 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SupervisorSignoff
-        fields = ("id", "user", "user_name", "skill", "skill_name",
-                  "supervisor", "supervisor_name", "note", "created_at")
+        fields = (
+            "id",
+            "user",
+            "user_name",
+            "skill",
+            "skill_name",
+            "supervisor",
+            "supervisor_name",
+            "note",
+            "created_at",
+        )
 
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
@@ -131,9 +162,22 @@ class BadgeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = Badge
-        fields = ("id", "org", "code", "name", "description", "rule_type", "value",
-                  "skill", "skill_name", "team", "team_name", "department", "department_name",
-                  "icon")
+        fields = (
+            "id",
+            "org",
+            "code",
+            "name",
+            "description",
+            "rule_type",
+            "value",
+            "skill",
+            "skill_name",
+            "team",
+            "team_name",
+            "department",
+            "department_name",
+            "icon",
+        )
 
 
 class UserBadgeSerializer(serializers.ModelSerializer):
@@ -183,6 +227,7 @@ class RoleAssignmentSerializer(serializers.ModelSerializer):
 #    These are used to *serve* questions safely (hide is_correct).
 # -----------------------------------------------------------------------------
 
+
 class ChoicePublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Choice
@@ -199,21 +244,34 @@ class QuestionPublicSerializer(serializers.ModelSerializer):
 
 class ModuleSerializer(serializers.ModelSerializer):
     """Expose module with (read-only) public questions for dashboard/preview."""
+
     questions = QuestionPublicSerializer(many=True, read_only=True)
 
     class Meta:
         model = Module
         fields = (
-            "id", "org", "skill", "sop", "title", "difficulty", "active",
-            "pass_mark", "questions", "passing_score",
-            "require_viewed", "question_pool_count",
-            "shuffle_questions", "shuffle_choices", "negative_marking",
+            "id",
+            "org",
+            "skill",
+            "sop",
+            "title",
+            "difficulty",
+            "active",
+            "pass_mark",
+            "questions",
+            "passing_score",
+            "require_viewed",
+            "question_pool_count",
+            "shuffle_questions",
+            "shuffle_choices",
+            "negative_marking",
         )
 
 
 # -----------------------------------------------------------------------------
 # 5) REQUEST/RESPONSE SCHEMAS (non-model; for endpoints)
 # -----------------------------------------------------------------------------
+
 
 # Progress & leaderboard
 class ProgressSkillSerializer(serializers.Serializer):

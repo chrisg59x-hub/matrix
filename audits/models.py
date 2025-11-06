@@ -1,6 +1,7 @@
 # audits/models.py
-from django.db import models
 from django.conf import settings
+from django.db import models
+
 
 class AuditLog(models.Model):
     when = models.DateTimeField(auto_now_add=True)
