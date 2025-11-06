@@ -54,9 +54,6 @@ class QuestionInline(admin.TabularInline):
 
 
 @admin.register(Module)
-class ModuleAdmin(admin.ModelAdmin):
-    list_display = ("title", "skill", "difficulty", "pass_mark", "active")
-
 
 class ModuleAdmin(admin.ModelAdmin):
     list_display = (
