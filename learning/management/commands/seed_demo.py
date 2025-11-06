@@ -91,16 +91,25 @@ class Command(BaseCommand):
                 Choice.objects.create(question=q, text="Use a forklift unnecessarily", is_correct=False)
 
         # --- XP Levels ---
-        for lvl in range(1, 6):
-            LevelDef.objects.get_or_create(org=org, level=lvl, min_xp=lvl * 100)
+        # --- XP Levels ---
+    for lvl in range(1, 6):
+        LevelDef.objects.get_or_create(
+        org=org,
+        level=lvl,
+        defaults={"total_xp": lvl * 100},  # <-- use total_xp, not min_xp
+    )
 
         # --- Badges ---
         badge, _ = Badge.objects.get_or_create(
-            org=org,
-            code="SAFEHANDS",
-            name="Safe Hands",
-            description="Awarded for passing the safety quiz.",
-            skill=safety,
+        org=org,
+        code="SAFEHANDS",
+        defaults={
+            "name": "Safe Hands",
+            "description": "Awarded for passing the safety quiz.",
+            "rule_type": "skill_xp",  # adjust to a valid enum in your model
+            "value": 100,             # threshold or points depending on your rule
+            "skill": safety,
+        },
         )
         UserBadge.objects.get_or_create(user=employee, badge=badge)
 
