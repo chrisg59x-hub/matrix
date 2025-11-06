@@ -1,0 +1,138 @@
+name: Context Refresh
+on:
+  push:
+    branches: [ main, master, dev, "**/feature/**" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: context-refresh-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  DJANGO_SETTINGS_MODULE: matrix.settings   # <- change if your settings module differs
+  PYTHONUNBUFFERED: 1
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install -U pip
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install "Django>=4.2" djangorestframework drf-spectacular ruff flake8
+          fi
+
+      # ---- LINT ----
+      - name: Ruff (lint)
+        run: |
+          ruff check . --output-format=github
+
+      - name: Flake8 (lint)
+        run: |
+          flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics
+          flake8 . --exit-zero --max-complexity=12 --max-line-length=120 --statistics
+
+      # ---- REFRESH CONTEXT (non-blocking) ----
+      - name: Refresh context via cx_refresh (non-blocking)
+        run: |
+          if [ -f scripts/cx_refresh.py ]; then
+            python scripts/cx_refresh.py || true
+          else
+            echo "scripts/cx_refresh.py not found; skipping."
+          fi
+
+      # ---- OPENAPI (drf-spectacular) ----
+      - name: Generate OpenAPI (YAML + JSON)
+        run: |
+          mkdir -p context
+          if [ -f manage.py ]; then
+            python manage.py spectacular --file context/openapi.yaml --format yaml || true
+            python manage.py spectacular --file context/openapi.json --format json || true
+          else
+            echo "manage.py not found; skipping schema generation."
+          fi
+
+      # ---- ReDoc HTML (pretty API docs) ----
+      - name: Build ReDoc page
+        run: |
+          mkdir -p docs
+          cat > docs/api.html <<'HTML'
+          <!doctype html>
+          <html>
+            <head>
+              <meta charset="utf-8"/>
+              <meta name="viewport" content="width=device-width, initial-scale=1">
+              <title>Matrix SOPRPG API</title>
+              <style>body{margin:0} .topbar{position:fixed;z-index:10;top:0;left:0;right:0;height:48px;display:flex;align-items:center;padding:0 14px;background:#0b1021;color:#fff;font-family:sans-serif} .wrap{padding-top:48px}</style>
+              <script src="https://cdn.redoc.ly/redoc/latest/bundles/redoc.standalone.js"></script>
+            </head>
+            <body>
+              <div class="topbar">Matrix SOPRPG API Docs</div>
+              <div class="wrap">
+                <redoc spec-url="../context/openapi.json"></redoc>
+              </div>
+            </body>
+          </html>
+          HTML
+
+      # ---- STAGE + COMMIT ANY CHANGES ----
+      - name: Stage context updates
+        run: |
+          git add context/00_MASTER_CONTEXT.md || true
+          git add context/02_MODULE_SUMMARIES || true
+          git add context/07_SESSIONS || true
+          git add context/openapi.yaml context/openapi.json || true
+          git add docs/api.html || true
+
+      - name: Commit if changed
+        id: commit
+        run: |
+          if git diff --cached --quiet; then
+            echo "changed=false" >> $GITHUB_OUTPUT
+          else
+            git config user.name  "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git commit -m "CI: refresh context, OpenAPI & ReDoc [skip ci]"
+            echo "changed=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Push
+        if: steps.commit.outputs.changed == 'true' && github.event_name != 'pull_request'
+        run: git push
+
+      # ---- ARTIFACTS ----
+      - name: Upload OpenAPI artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: openapi-spec
+          path: |
+            context/openapi.yaml
+            context/openapi.json
+          if-no-files-found: warn
+
+      - name: Upload ReDoc artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: redoc-html
+          path: docs/api.html
+          if-no-files-found: warn
