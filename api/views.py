@@ -14,12 +14,12 @@ from rest_framework.exceptions import ValidationError, PermissionDenied
 from drf_spectacular.utils import extend_schema
 
 # -----------------------------------------------------------------------------
-# 2) App model imports
+# 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from accounts.models import Org, User
 from sops.models import SOP, SOPView
 from learning.models import (
-    JobRole, Skill, RoleSkill, Module, Question, Choice, ModuleAttempt,
+    JobRole, Skill, RoleSkill, Module, ModuleAttempt,
     XPEvent, SupervisorSignoff, RecertRequirement, LevelDef,
     Badge, UserBadge, Department, Team, TeamMember, RoleAssignment,
 )

@@ -2,7 +2,10 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from sops.models import SOP
-from learning.models import RecertRequirement, Skill, Module, RoleSkill
+from learning.models import RecertRequirement, Module, RoleSkill
+from typing import TYPE_CHECKING
+if TYPE_CHECKING:
+    from learning.models import Skill  # type: ignore[unused-import]
 from django.utils import timezone
 from datetime import timedelta
 
