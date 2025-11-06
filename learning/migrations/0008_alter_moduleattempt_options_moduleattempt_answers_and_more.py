@@ -32,7 +32,7 @@ class Migration(migrations.Migration):
             model_name="moduleattempt",
             name="module",
             field=models.ForeignKey(
-                default="2025-10-23 00:00:00",
+                default=uuid.uuid4,
                 on_delete=django.db.models.deletion.CASCADE,
                 related_name="attempts",
                 to="learning.module",
