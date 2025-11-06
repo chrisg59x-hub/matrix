@@ -1,5 +1,6 @@
 # learning/models.py
-import uuid, math
+import uuid
+import math
 from django.db import models
 from django.conf import settings
 from django.utils import timezone

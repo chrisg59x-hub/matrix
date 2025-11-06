@@ -1,5 +1,5 @@
 # learning/management/commands/seed_demo.py
-import itertools
+# import itertools
 from datetime import timedelta
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
@@ -7,7 +7,7 @@ from django.utils import timezone
 from learning.models import Department, Team, TeamMember, RoleAssignment
 
 
-from accounts.models import Org
+# from accounts.models import Org
 from learning.models import (
     JobRole, Skill, RoleSkill, Module, ModuleAttempt, XPEvent, SupervisorSignoff,
     LevelDef, Badge, UserBadge, xp_for_next_level
