@@ -1,31 +1,37 @@
 ﻿$ErrorActionPreference = "Stop"
 Write-Host "[pre-commit] Refreshing context…"
 
-# Prefer 'py' launcher; fallback to 'python'
+# Prefer 'py' then 'python'
 function Run-Python($args) {
-  if (Get-Command py -ErrorAction SilentlyContinue) {
-    & py $args
-  } elseif (Get-Command python -ErrorAction SilentlyContinue) {
-    & python $args
-  } else {
-    Write-Host "[pre-commit] Python not found on PATH. Skipping refresh."
-    return $false
-  }
-  return $true
+  if (Get-Command py -ErrorAction SilentlyContinue)     { & py $args;     return $LASTEXITCODE }
+  if (Get-Command python -ErrorAction SilentlyContinue) { & python $args; return $LASTEXITCODE }
+  Write-Host "[pre-commit] Python not found on PATH. Skipping refresh."
+  return 0
 }
 
-# Run cx_refresh.py if present (non-blocking on failure)
+# Optional refresh step (non-blocking)
 if (Test-Path "scripts\cx_refresh.py") {
-  try { Run-Python "scripts\cx_refresh.py" | Out-Null }
-  catch { Write-Host "[pre-commit] cx_refresh.py error (continuing): $($_.Exception.Message)" }
+  try {
+    $code = Run-Python "scripts\cx_refresh.py"
+    if ($code -ne 0) { Write-Host "[pre-commit] cx_refresh.py returned $code (continuing)" }
+  } catch {
+    Write-Host "[pre-commit] cx_refresh.py error (continuing): $($_.Exception.Message)"
+  }
 } else {
   Write-Host "[pre-commit] scripts\cx_refresh.py not found, skipping."
 }
 
-# Auto-stage context updates (ignore errors if paths missing)
-git add context\00_MASTER_CONTEXT.md 2>$null
-git add context\02_MODULE_SUMMARIES 2>$null
-git add context\07_SESSIONS 2>$null
+# Safe git add (only if the path exists)
+function Safe-Add($p) {
+  if (Test-Path $p) {
+    & git add $p 2>$null | Out-Null
+  }
+}
+
+Safe-Add "context\00_MASTER_CONTEXT.md"
+Safe-Add "context\02_MODULE_SUMMARIES"
+Safe-Add "context\07_SESSIONS"
 
 Write-Host "[pre-commit] Done."
 exit 0
+
