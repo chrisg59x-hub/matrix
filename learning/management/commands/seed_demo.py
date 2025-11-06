@@ -1,29 +1,29 @@
 # learning/management/commands/seed_demo.py
 import uuid
-import random
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from accounts.models import Org
 from sops.models import SOP
 from learning.models import (
     Skill, JobRole, RoleSkill, Module, Question, Choice,
-    ModuleAttempt, XPEvent, LevelDef, Badge, UserBadge,
+    XPEvent, LevelDef, Badge, UserBadge,
 )
 
 User = get_user_model()
 
 class Command(BaseCommand):
-    help = "Seed demo data for Matrix SOPRPG (orgs, users, skills, SOPs, modules, etc.)"
+    help = "Seed demo data for Matrix SOPRPG (org, users, skills, SOPs, module/questions, XP, badges)"
 
     def handle(self, *args, **options):
-        self.stdout.write(self.style.WARNING("Seeding demo data..."))
+        self.stdout.write(self.style.WARNING("Seeding demo data…"))
 
         # --- Org ---
         org, _ = Org.objects.get_or_create(name="Matrix Industries")
 
         # --- Users ---
         admin, _ = User.objects.get_or_create(
-            username="admin", defaults={
+            username="admin",
+            defaults={
                 "email": "admin@matrix.local",
                 "org": org,
                 "biz_role": "admin",
@@ -31,28 +31,30 @@ class Command(BaseCommand):
                 "is_superuser": True,
             },
         )
-        admin.set_password("admin123")
-        admin.save()
+        if not admin.has_usable_password():
+            admin.set_password("admin123"); admin.save()
 
         manager, _ = User.objects.get_or_create(
-            username="manager", defaults={
+            username="manager",
+            defaults={
                 "email": "manager@matrix.local",
                 "org": org,
                 "biz_role": "manager",
             },
         )
-        manager.set_password("manager123")
-        manager.save()
+        if not manager.has_usable_password():
+            manager.set_password("manager123"); manager.save()
 
         employee, _ = User.objects.get_or_create(
-            username="employee", defaults={
+            username="employee",
+            defaults={
                 "email": "employee@matrix.local",
                 "org": org,
                 "biz_role": "employee",
             },
         )
-        employee.set_password("employee123")
-        employee.save()
+        if not employee.has_usable_password():
+            employee.set_password("employee123"); employee.save()
 
         # --- Skills & Roles ---
         safety, _ = Skill.objects.get_or_create(org=org, name="Health & Safety")
@@ -62,61 +64,70 @@ class Command(BaseCommand):
         RoleSkill.objects.get_or_create(role=role, skill=safety, required=True)
         RoleSkill.objects.get_or_create(role=role, skill=product, required=False)
 
-        # --- SOPs ---
+        # --- SOP ---
         sop, _ = SOP.objects.get_or_create(org=org, title="Safe Lifting Procedures")
 
-        # --- Modules & Questions ---
+        # --- Module & Questions ---
         module, _ = Module.objects.get_or_create(
             org=org,
             skill=safety,
             sop=sop,
             title="Manual Handling Quiz",
-            pass_mark=60,
-            active=True,
-            shuffle_questions=True,
-            shuffle_choices=True,
+            defaults={
+                "pass_mark": 60,
+                "active": True,
+                "shuffle_questions": True,
+                "shuffle_choices": True,
+                "negative_marking": False,
+            },
         )
 
         if not module.questions.exists():
-            for i in range(3):
-                q = Question.objects.create(
-                    module=module,
-                    qtype="single",
-                    text=f"What is the correct way to lift object {i+1}?",
-                    points=10,
-                )
-                correct_choice = Choice.objects.create(question=q, text="Bend knees, keep back straight", is_correct=True)
-                Choice.objects.create(question=q, text="Bend back, keep legs straight", is_correct=False)
-                Choice.objects.create(question=q, text="Ask someone else", is_correct=False)
-                Choice.objects.create(question=q, text="Use a forklift unnecessarily", is_correct=False)
+            q1 = Question.objects.create(module=module, qtype="single", text="Keep your back…", points=10)
+            Choice.objects.bulk_create([
+                Choice(question=q1, text="Straight; bend at the knees", is_correct=True),
+                Choice(question=q1, text="Rounded; lift with your back", is_correct=False),
+                Choice(question=q1, text="Twisted to one side", is_correct=False),
+            ])
 
-        # --- XP Levels ---
-        # --- XP Levels ---
-    for lvl in range(1, 6):
-        LevelDef.objects.get_or_create(
-        org=org,
-        level=lvl,
-        defaults={"total_xp": lvl * 100},  # <-- use total_xp, not min_xp
-    )
+            q2 = Question.objects.create(module=module, qtype="truefalse", text="It is OK to run in aisles.", points=10)
+            Choice.objects.bulk_create([
+                Choice(question=q2, text="True", is_correct=False),
+                Choice(question=q2, text="False", is_correct=True),
+            ])
 
-        # --- Badges ---
+            q3 = Question.objects.create(module=module, qtype="single", text="Best option for a heavy pallet?", points=10)
+            Choice.objects.bulk_create([
+                Choice(question=q3, text="Use proper equipment", is_correct=True),
+                Choice(question=q3, text="Drag it manually", is_correct=False),
+                Choice(question=q3, text="Kick it gently", is_correct=False),
+            ])
+
+        # --- Levels (LevelDef has fields: org, level, total_xp) ---
+        for lvl in range(1, 6):
+            LevelDef.objects.get_or_create(
+                org=org,
+                level=lvl,
+                defaults={"total_xp": lvl * 100},
+            )
+
+        # --- Badge (use minimal required fields; adjust if your model requires rule_type/value) ---
         badge, _ = Badge.objects.get_or_create(
-        org=org,
-        code="SAFEHANDS",
-        defaults={
-            "name": "Safe Hands",
-            "description": "Awarded for passing the safety quiz.",
-            "rule_type": "skill_xp",  # adjust to a valid enum in your model
-            "value": 100,             # threshold or points depending on your rule
-            "skill": safety,
-        },
+            org=org,
+            code="SAFEHANDS",
+            defaults={
+                "name": "Safe Hands",
+                "description": "Awarded for passing the safety quiz.",
+                "skill": safety,   # remove if your Badge.skill is optional and not present
+            },
         )
+
         UserBadge.objects.get_or_create(user=employee, badge=badge)
 
-        # --- XP Events ---
-        XPEvent.objects.create(org=org, user=employee, skill=safety, source="quiz", amount=120)
+        # --- XP sample ---
+        XPEvent.objects.get_or_create(org=org, user=employee, skill=safety, source="seed", amount=120)
 
-        self.stdout.write(self.style.SUCCESS("✅ Demo data created successfully!"))
+        self.stdout.write(self.style.SUCCESS("✅ Demo data created."))
         self.stdout.write("Logins:")
         self.stdout.write("  admin / admin123")
         self.stdout.write("  manager / manager123")
