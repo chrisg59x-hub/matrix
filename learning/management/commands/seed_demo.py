@@ -44,7 +44,7 @@ class Command(BaseCommand):
             defaults={"email": "employee@matrix.local", "org": org, "biz_role": "employee", "is_staff": False},
         )
         if not employee.has_usable_password():
-            employee.set_password("employee123"); employee.save()
+            employee.set_password("employee123"), employee.save()
 
         self.stdout.write(self.style.SUCCESS("✔ Org & users ready"))
 
