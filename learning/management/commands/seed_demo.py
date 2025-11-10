@@ -105,10 +105,10 @@ class Command(BaseCommand):
 
         # --- Levels (LevelDef has fields: org, level, total_xp) ---
         for lvl in range(1, 6):
-        LevelDef.objects.get_or_create(
-            level=lvl,
-            defaults={"total_xp": lvl * 100},
-        )
+            LevelDef.objects.get_or_create(
+                level=lvl,
+                defaults={"total_xp": lvl * 100},
+            )
 
         # --- Badge (use minimal required fields; adjust if your model requires rule_type/value) ---
         badge, _ = Badge.objects.get_or_create(
