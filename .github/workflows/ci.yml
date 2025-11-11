@@ -1,0 +1,58 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+
+jobs:
+  backend:
+    name: Backend (Ruff + Django tests)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./  # repo root where manage.py lives
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install deps
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install ruff
+
+      - name: Lint (Ruff)
+        run: ruff check .
+
+      - name: Run Django tests
+        env:
+          DJANGO_SETTINGS_MODULE: matrix.settings
+        run: |
+          python manage.py migrate --noinput
+          python manage.py test
+
+  frontend:
+    name: Frontend (Nuxt build)
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./matrix-demo  # <--- change if your Nuxt folder is named differently
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Use Node LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: matrix-demo/package-lock.json
+
+      - name: Install & Build
+        run: |
+          npm ci || npm i
+          npm run build
