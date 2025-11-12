@@ -53,7 +53,7 @@ jobs:
           pwd
           ls
           python -c "import django; print('Django version:', django.get_version())"
-          
+
       - name: ⚙️ Migrate (SQLite)
         env:
           DJANGO_SETTINGS_MODULE: matrix.settings
@@ -63,12 +63,7 @@ jobs:
         env:
           DJANGO_SETTINGS_MODULE: matrix.settings
         run: |
-          if python - <<'PY' 2>/dev/null; then
-          import importlib; importlib.import_module('pytest'); print("pytest ok")
-          PY
-          then pytest -q
-          else python manage.py test
-          fi
+          python manage.py test
 
       - name: 📄 OpenAPI (optional)
         continue-on-error: true
