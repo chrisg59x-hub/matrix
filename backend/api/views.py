@@ -15,7 +15,6 @@ from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
-from drf_spectacular.utils import extend_schema
 from learning.models import (
     Badge,
     Department,
