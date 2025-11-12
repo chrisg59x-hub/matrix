@@ -64,8 +64,8 @@ jobs:
         run: |
           mkdir -p context
           if [ -f manage.py ]; then
-            python manage.py spectacular --file ./backend/context/openapi.yaml --format yaml || true
-            python manage.py spectacular --file ./backend/context/openapi.json --format json || true
+            python manage.py spectacular --file backend/context/openapi.yaml --format yaml || true
+            python manage.py spectacular --file backend/context/openapi.json --format json || true
           else
             echo "manage.py not found; skipping schema generation."
           fi
