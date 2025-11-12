@@ -1,37 +1,140 @@
-name: CI
+name: 🔗 Monorepo CI (Backend + Frontend)
+
 on:
-  push: { branches: [ main, master ] }
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+      - '.github/workflows/ci.yml'
   pull_request:
+    paths:
+      - 'backend/**'
+      - 'frontend/**'
+
+concurrency:
+  group: monorepo-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
   backend:
+    name: 🧪 Backend (Django)
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with: { python-version: '3.11' }
-      - name: Install deps
+      - name: 🪣 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: ♻️ Cache pip
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/pip
+          key: ${{ runner.os }}-pip-${{ hashFiles('backend/requirements.txt') }}
+          restore-keys: ${{ runner.os }}-pip-
+
+      - name: 📦 Install deps
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install ruff
-      - name: Lint (Ruff)
+          pip install ruff pytest pytest-django drf-spectacular || true
+
+      - name: 🔍 Lint (Ruff)
         run: ruff check .
-      - name: Django tests
+
+      - name: ⚙️ Migrate (SQLite)
+        env:
+          DJANGO_SETTINGS_MODULE: matrix.settings
+        run: python manage.py migrate --noinput
+
+      - name: 🧪 Tests
         env:
           DJANGO_SETTINGS_MODULE: matrix.settings
         run: |
-          python manage.py migrate --noinput
-          python manage.py test
+          if python - <<'PY' 2>/dev/null; then
+          import importlib; importlib.import_module('pytest'); print("pytest ok")
+          PY
+          then pytest -q
+          else python manage.py test
+          fi
+
+      - name: 📄 OpenAPI (optional)
+        continue-on-error: true
+        env:
+          DJANGO_SETTINGS_MODULE: matrix.settings
+        run: |
+          mkdir -p context
+          python manage.py spectacular --format openapi-json --output context/openapi.json
+          python manage.py spectacular --format openapi-yaml --output context/openapi.yaml
+
+      - name: 📤 Upload backend artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-artifacts
+          path: |
+            backend/context/openapi.json
+            backend/context/openapi.yaml
+
+      - name: 🧾 Backend Summary
+        run: |
+          echo "✅ **Backend Summary**" >> $GITHUB_STEP_SUMMARY
+          echo "- Python: $(python --version)" >> $GITHUB_STEP_SUMMARY
+          echo "- Ruff: done" >> $GITHUB_STEP_SUMMARY
+          echo "- Tests: done" >> $GITHUB_STEP_SUMMARY
+          echo "- OpenAPI: backend/context/openapi.(json|yaml)" >> $GITHUB_STEP_SUMMARY
 
   frontend:
+    name: 🧩 Frontend (Nuxt)
     runs-on: ubuntu-latest
-    defaults: { run: { working-directory: ./matrix-demo } }  # change if different
+    needs: backend
+    defaults:
+      run:
+        working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: '20', cache: 'npm', cache-dependency-path: matrix-demo/package-lock.json }
-      - name: Build
+      - name: 🪣 Checkout
+        uses: actions/checkout@v4
+
+      - name: 🧰 Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: 'frontend/package-lock.json'
+
+      - name: 📦 Install
+        run: npm ci || npm install
+        env: { CI: true }
+
+      - name: 🔍 ESLint (if defined)
         run: |
-          npm ci || npm i
-          npm run build
+          if npm run | grep -qE '^\s*lint\s'; then
+            npm run lint
+          else
+            echo "No lint script defined"
+          fi
+
+      - name: 🏗️ Build
+        env:
+          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api' }}
+        run: npm run build
+
+      - name: 📤 Upload frontend artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-dist
+          path: frontend/.output/**
+
+      - name: 🧾 Frontend Summary
+        run: |
+          echo "✅ **Frontend Summary**" >> $GITHUB_STEP_SUMMARY
+          echo "- Node: $(node -v)" >> $GITHUB_STEP_SUMMARY
+          echo "- NPM: $(npm -v)" >> $GITHUB_STEP_SUMMARY
+          echo "- Build: frontend/.output/" >> $GITHUB_STEP_SUMMARY
+          echo "- API Base: ${{ secrets.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api' }}" >> $GITHUB_STEP_SUMMARY
