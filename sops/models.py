@@ -4,7 +4,6 @@ from django.conf import settings
 from django.core.validators import FileExtensionValidator
 from django.db import models
 
-
 class SOP(models.Model):
     STATUS = [("draft", "draft"), ("review", "review"), ("published", "published"), ("retired", "retired")]
     MEDIA_CHOICES = [("video", "video"), ("pdf", "pdf"), ("pptx", "pptx"), ("link", "link")]
@@ -36,11 +35,13 @@ class SOP(models.Model):
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     pages = models.PositiveIntegerField(null=True, blank=True)
     thumbnail = models.ImageField(upload_to="sops/thumbs/", null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
 
     # ...existing fields..
 
     class Meta:
         unique_together = ("org", "code", "version_major", "version_minor")
+        ordering = ("-created_at",)  # or ("code",) or whatever you prefer
 
     def __str__(self):
         return f"{self.code} v{self.version_major}.{self.version_minor} – {self.title}"

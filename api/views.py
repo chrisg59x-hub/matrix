@@ -30,6 +30,7 @@ from learning.models import (
     XPEvent,
 )
 from rest_framework import decorators, permissions, response, status, viewsets
+from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from sops.models import SOP, SOPView
 
@@ -84,12 +85,11 @@ class UserViewSet(viewsets.ModelViewSet):
     serializer_class = UserSerializer
     permission_classes = [IsManagerForWrites]
 
-
 class SOPViewSet(viewsets.ModelViewSet):
-    queryset = SOP.objects.all()
+    queryset = SOP.objects.all()  # add .order_by(...) if you didn’t set Meta.ordering
     serializer_class = SOPSerializer
     permission_classes = [IsManagerForWrites]
-
+    parser_classes = (MultiPartParser, FormParser, JSONParser)  # <-- add this
 
 class SkillViewSet(viewsets.ModelViewSet):
     queryset = Skill.objects.all()
