@@ -35,6 +35,7 @@ class SOP(models.Model):
     duration_seconds = models.PositiveIntegerField(null=True, blank=True)
     pages = models.PositiveIntegerField(null=True, blank=True)
     thumbnail = models.ImageField(upload_to="sops/thumbs/", null=True, blank=True)
+    active = models.BooleanField(default=True, db_index=True)
     created_at = models.DateTimeField(auto_now_add=True)
 
     # ...existing fields..

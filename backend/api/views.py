@@ -3,10 +3,15 @@
 # 1) Core imports
 # -----------------------------------------------------------------------------
 import random
-
+import csv
+import io
 # -----------------------------------------------------------------------------
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
+from django.http import HttpResponse
+from django.db.models import Sum, Count, F
+from drf_spectacular.utils import extend_schema, OpenApiParameter
+from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
 from django.db.models import Sum
 from django.shortcuts import get_object_or_404
@@ -29,8 +34,9 @@ from learning.models import (
     UserBadge,
     XPEvent,
 )
-from rest_framework import decorators, permissions, response, status, viewsets
+from rest_framework import decorators, permissions, response, status, viewsets, filters
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
+from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied, ValidationError
 from sops.models import SOP, SOPView
 
@@ -70,7 +76,6 @@ from .serializers import (
     XPEventSerializer,
 )
 
-
 # -----------------------------------------------------------------------------
 # 5) Basic CRUD ViewSets (standard DRF)
 # -----------------------------------------------------------------------------
@@ -90,6 +95,13 @@ class SOPViewSet(viewsets.ModelViewSet):
     serializer_class = SOPSerializer
     permission_classes = [IsManagerForWrites]
     parser_classes = (MultiPartParser, FormParser, JSONParser)  # <-- add this
+
+    # Nice APIs for list views:
+    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+    filterset_fields = ['org', 'type', 'active']  # adjust to your fields
+    search_fields = ['title', 'code', 'description']  # adjust
+    ordering_fields = ['created_at', 'title', 'id']   # adjust
+    ordering = ['-created_at']  # default list order
 
 class SkillViewSet(viewsets.ModelViewSet):
     queryset = Skill.objects.all()
@@ -285,7 +297,203 @@ def leaderboard(request):
 #       submit_started_attempt() remain unchanged — keep them here below.
 #       Include @extend_schema annotations as shown earlier.
 
+def _require_manager(request):
+    u = request.user
+    if getattr(u, "biz_role", "") not in ("manager", "admin"):
+        raise PermissionDenied("Managers/admins only.")
+    return u
 
+def _org_id(request):
+    return getattr(request.user, "org_id", None)
+
+def _csv_response(filename: str, rows, header: list[str]):
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    if header:
+        w.writerow(header)
+    for r in rows:
+        w.writerow(r)
+    resp = HttpResponse(buf.getvalue(), content_type="text/csv; charset=utf-8")
+    resp["Content-Disposition"] = f'attachment; filename="{filename}"'
+    return resp
+
+# --- CSV: ORG Leaderboard --------------------------------------------------
+
+@extend_schema(
+    description="Download the current org leaderboard as CSV (rank, user, xp, level).",
+    responses={(200, "text/csv"): None},
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def leaderboard_csv(request):
+    org_id = _org_id(request)
+    qs = (XPEvent.objects
+          .filter(org_id=org_id)
+          .values("user_id", "user__username")
+          .annotate(overall_xp=Sum("amount"))
+          .order_by("-overall_xp"))
+    rows = []
+    for i, r in enumerate(qs, start=1):
+        level = level_from_total_xp(r["overall_xp"] or 0)
+        rows.append([i, r["user_id"], r["user__username"], r["overall_xp"] or 0, level])
+    return _csv_response("leaderboard.csv", rows,
+                         header=["rank", "user_id", "username", "overall_xp", "level"])
+
+# --- CSV: Raw XP export (manager/admin only) -------------------------------
+
+@extend_schema(
+    description="Export raw XP events for your org (CSV). Managers/admins only.",
+    responses={(200, "text/csv"): None},
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def xp_events_csv(request):
+    _require_manager(request)
+    org_id = _org_id(request)
+    qs = (XPEvent.objects
+          .select_related("user", "skill")
+          .filter(org_id=org_id)
+          .order_by("-created_at"))
+    rows = []
+    for e in qs.iterator():
+        rows.append([
+            str(e.id),
+            e.created_at.isoformat() if e.created_at else "",
+            str(getattr(e.org, "id", "")),
+            str(getattr(e.user, "id", "")),
+            getattr(e.user, "username", ""),
+            str(getattr(e.skill, "id", "")),
+            getattr(e.skill, "name", ""),
+            e.source or "",
+            e.amount or 0,
+            (e.meta if isinstance(e.meta, (str, int, float)) else ("" if e.meta is None else str(e.meta))),
+        ])
+    return _csv_response("xp_events.csv", rows,
+                         header=["id","created_at","org_id","user_id","username","skill_id","skill_name","source","amount","meta"])
+
+# --- Skill Leaderboard -----------------------------------------------------
+
+@extend_schema(
+    description="Leaderboard by XP for a specific skill in the current org.",
+    parameters=[OpenApiParameter("skill_id", str, OpenApiParameter.PATH)],
+    responses=LeaderboardEntrySerializer(many=True),
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def skill_leaderboard(request, skill_id: str):
+    org_id = _org_id(request)
+    qs = (XPEvent.objects
+          .filter(org_id=org_id, skill_id=skill_id)
+          .values("user_id", "user__username")
+          .annotate(overall_xp=Sum("amount"))
+          .order_by("-overall_xp"))
+    results = []
+    for rank, row in enumerate(qs, start=1):
+        results.append({
+            "rank": rank,
+            "user_id": row["user_id"],
+            "username": row["user__username"],
+            "overall_xp": row["overall_xp"] or 0,
+            "level": level_from_total_xp(row["overall_xp"] or 0),
+        })
+    return response.Response(results)
+
+# --- Role Leaderboard ------------------------------------------------------
+
+@extend_schema(
+    description="Leaderboard by XP for users assigned to a specific JobRole in your org.",
+    parameters=[OpenApiParameter("role_id", str, OpenApiParameter.PATH)],
+    responses=LeaderboardEntrySerializer(many=True),
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def role_leaderboard(request, role_id: str):
+    org_id = _org_id(request)
+    # Users currently active in the role
+    user_ids = (RoleAssignment.objects
+                .filter(role_id=role_id, active=True)
+                .values_list("user_id", flat=True))
+    qs = (XPEvent.objects
+          .filter(org_id=org_id, user_id__in=user_ids)
+          .values("user_id", "user__username")
+          .annotate(overall_xp=Sum("amount"))
+          .order_by("-overall_xp"))
+    results = []
+    for rank, row in enumerate(qs, start=1):
+        results.append({
+            "rank": rank,
+            "user_id": row["user_id"],
+            "username": row["user__username"],
+            "overall_xp": row["overall_xp"] or 0,
+            "level": level_from_total_xp(row["overall_xp"] or 0),
+        })
+    return response.Response(results)
+
+# --- Group (Department/Team) Leaderboard -----------------------------------
+
+@extend_schema(
+    description="Leaderboard grouped by Department and Team (within current org).",
+    responses={"200": {"type": "object", "properties": {
+        "departments": {"type": "array", "items": {"type": "object"}},
+        "teams": {"type": "array", "items": {"type": "object"}},
+    }}},
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def org_leaderboard_by_group(request):
+    org_id = _org_id(request)
+    # Teams: sum XP of active members
+    team_rows = (XPEvent.objects
+                 .filter(org_id=org_id)
+                 .values("user_id")
+                 .annotate(xp=Sum("amount")))
+    # Map user -> xp
+    user_xp = {r["user_id"]: r["xp"] or 0 for r in team_rows}
+
+    # Team XP
+    teams = (Team.objects
+             .select_related("department")
+             .filter(org_id=org_id))
+    team_payload = []
+    for t in teams:
+        member_ids = list(TeamMember.objects.filter(team=t, active=True).values_list("user_id", flat=True))
+        total = sum(user_xp.get(uid, 0) for uid in member_ids)
+        team_payload.append({
+            "team_id": str(t.id),
+            "team_name": t.name,
+            "department_id": str(getattr(t.department, "id", "")) if t.department_id else None,
+            "department_name": getattr(t.department, "name", None),
+            "overall_xp": total,
+            "level": level_from_total_xp(total),
+        })
+
+    # Department XP = sum of its teams (or members)
+    # Faster to roll-up from team_payload:
+    dept_map = {}
+    for tp in team_payload:
+        did = tp["department_id"]
+        if not did:
+            continue
+        if did not in dept_map:
+            dept_map[did] = {
+                "department_id": did,
+                "department_name": tp["department_name"],
+                "overall_xp": 0,
+            }
+        dept_map[did]["overall_xp"] += tp["overall_xp"]
+    dept_payload = []
+    for did, d in dept_map.items():
+        d["level"] = level_from_total_xp(d["overall_xp"])
+        dept_payload.append(d)
+
+    # Order both by xp desc
+    team_payload.sort(key=lambda x: x["overall_xp"], reverse=True)
+    dept_payload.sort(key=lambda x: x["overall_xp"], reverse=True)
+
+    return response.Response({
+        "departments": dept_payload,
+        "teams": team_payload,
+    })
 # -----------------------------------------------------------------------------
 # 9) WhoAmI endpoint for Swagger banner / UI
 # -----------------------------------------------------------------------------

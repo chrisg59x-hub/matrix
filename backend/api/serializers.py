@@ -58,10 +58,17 @@ class UserSerializer(serializers.ModelSerializer):
 
 class SOPSerializer(serializers.ModelSerializer):
     """Includes media fields for video/pdf/pptx/link."""
-
+    media_url = serializers.SerializerMethodField()
     class Meta:
         model = SOP
         fields = "__all__"
+
+    def get_media_url(self, obj):
+        request = self.context.get('request')
+        f = getattr(obj, 'media_file', None)  # adjust field name
+        if f and hasattr(f, 'url') and request:
+            return request.build_absolute_uri(f.url)
+        return None
 
 
 class SOPViewSerializer(serializers.ModelSerializer):

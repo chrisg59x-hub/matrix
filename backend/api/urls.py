@@ -29,8 +29,8 @@ from .views import (
     start_module_attempt,
     submit_started_attempt,
     # --- Optional extras (leave commented if not implemented) ---
-    # leaderboard_csv, xp_events_csv,
-    # skill_leaderboard, role_leaderboard, org_leaderboard_by_group,
+    leaderboard_csv, xp_events_csv,
+    skill_leaderboard, role_leaderboard, org_leaderboard_by_group,
     whoami,
 )
 
@@ -70,10 +70,10 @@ urlpatterns = [
     path("leaderboard/", leaderboard),
     # --- Optional extras (uncomment if you added these views) ---
     # CSV exports:
-    # path("leaderboard.csv", leaderboard_csv),
-    # path("xp/export.csv", xp_events_csv),
+    path("leaderboard.csv", leaderboard_csv),
+    path("xp/export.csv", xp_events_csv),
     # Extra leaderboards:
-    # path("leaderboard/skill/<uuid:skill_id>/", skill_leaderboard),
-    # path("leaderboard/role/<uuid:role_id>/", role_leaderboard),
-    # path("leaderboard/group/", org_leaderboard_by_group),   # department/team scoped
+    path("leaderboard/skill/<uuid:skill_id>/", skill_leaderboard),
+    path("leaderboard/role/<uuid:role_id>/", role_leaderboard),
+    path("leaderboard/group/", org_leaderboard_by_group),   # department/team scoped
 ]
