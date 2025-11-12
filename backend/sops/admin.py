@@ -12,7 +12,3 @@ class SOPAdmin(admin.ModelAdmin):
 
 
 admin.site.register(SOPView)
-
-
-from django.contrib import admin
-from .models import SOP    

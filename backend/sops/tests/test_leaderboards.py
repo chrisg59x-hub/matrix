@@ -1,5 +1,5 @@
 from rest_framework.test import APIClient
-from django.urls import reverse
+#from django.urls import reverse
 from accounts.models import Org, User
 from learning.models import Skill, XPEvent
 
@@ -7,7 +7,8 @@ def _auth_client(role="admin"):
     c = APIClient()
     org, _ = Org.objects.get_or_create(name="Demo Org")
     u, _ = User.objects.get_or_create(username=f"{role}1", defaults={"biz_role": role, "org": org, "email": f"{role}1@x.x"})
-    u.set_password("pass1234"); u.save()
+    u.set_password("pass1234"),
+    u.save(),
     c.force_authenticate(user=u)
     return c, org, u
 
