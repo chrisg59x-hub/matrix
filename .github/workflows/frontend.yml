@@ -1,0 +1,73 @@
+name: 🧱 Frontend Build & QA
+
+on:
+  push:
+    paths:
+      - 'frontend/**'
+      - '.github/workflows/frontend.yml'
+  pull_request:
+    paths:
+      - 'frontend/**'
+
+jobs:
+  frontend:
+    name: 🧩 Nuxt QA + Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+
+    steps:
+      # --- 1️⃣ Checkout ---
+      - name: 🪣 Checkout Repository
+        uses: actions/checkout@v4
+
+      # --- 2️⃣ Node setup ---
+      - name: 🧰 Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      # --- 3️⃣ Dependency installation ---
+      - name: 📦 Install Dependencies
+        run: npm ci || npm install
+        env:
+          CI: true
+
+      # --- 4️⃣ Linting / static analysis ---
+      - name: 🔍 Run ESLint (if configured)
+        run: |
+          if npm run | grep -qE '^\s*lint\s'; then
+            echo "✅ Running lint script"
+            npm run lint
+          else
+            echo "⚠️  No lint script defined in package.json"
+          fi
+
+      # --- 5️⃣ Build (SSR static generation or dev bundle) ---
+      - name: 🏗️ Build Nuxt App
+        env:
+          NUXT_PUBLIC_API_BASE: ${{ secrets.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api' }}
+        run: |
+          echo "Starting Nuxt build..."
+          npm run build
+          echo "✅ Build completed successfully"
+
+      # --- 6️⃣ Artifact upload ---
+      - name: 📤 Upload Production Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: nuxt-dist
+          path: frontend/.output/**
+
+      # --- 7️⃣ Summary step ---
+      - name: 🧾 Job Summary
+        run: |
+          echo "✅ **Frontend Workflow Summary**" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- Node version: $(node -v)" >> $GITHUB_STEP_SUMMARY
+          echo "- NPM version: $(npm -v)" >> $GITHUB_STEP_SUMMARY
+          echo "- Build output path: frontend/.output/" >> $GITHUB_STEP_SUMMARY
+          echo "- API Base: ${{ secrets.NUXT_PUBLIC_API_BASE || 'http://localhost:8000/api' }}" >> $GITHUB_STEP_SUMMARY
