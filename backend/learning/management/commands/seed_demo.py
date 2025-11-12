@@ -1,5 +1,5 @@
 # learning/management/commands/seed_demo.py
-import uuid
+# import uuid
 from django.core.management.base import BaseCommand
 from django.contrib.auth import get_user_model
 from accounts.models import Org
@@ -32,7 +32,8 @@ class Command(BaseCommand):
             },
         )
         if not admin.has_usable_password():
-            admin.set_password("admin123"); admin.save()
+            admin.set_password("admin123"),
+            admin.save(),
 
         manager, _ = User.objects.get_or_create(
             username="manager",
@@ -43,7 +44,8 @@ class Command(BaseCommand):
             },
         )
         if not manager.has_usable_password():
-            manager.set_password("manager123"); manager.save()
+            manager.set_password("manager123"),
+            manager.save(),
 
         employee, _ = User.objects.get_or_create(
             username="employee",
@@ -54,7 +56,8 @@ class Command(BaseCommand):
             },
         )
         if not employee.has_usable_password():
-            employee.set_password("employee123"); employee.save()
+            employee.set_password("employee123"),
+            employee.save(),
 
         # --- Skills & Roles ---
         safety, _ = Skill.objects.get_or_create(org=org, name="Health & Safety")
