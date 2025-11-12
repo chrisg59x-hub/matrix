@@ -1,0 +1,5036 @@
+openapi: 3.0.3
+info:
+  title: Matrix API
+  version: 1.0.0
+  description: Gamified training platform
+paths:
+  /api/attempts/:
+    get:
+      operationId: attempts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - attempts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedModuleAttemptList'
+          description: ''
+    post:
+      operationId: attempts_create
+      tags:
+      - attempts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleAttempt'
+          description: ''
+  /api/attempts/{attempt_id}/submit/:
+    post:
+      operationId: attempts_submit_create
+      description: |-
+        Submit answers for a started attempt.
+        Supports negative marking for multi-select & returns per-question feedback.
+      parameters:
+      - in: path
+        name: attempt_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - attempts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SubmitAttemptRequest'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SubmitAttemptRequest'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SubmitAttemptRequest'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  attempt_id:
+                    type: string
+                    format: uuid
+                  percent:
+                    type: integer
+                  passed:
+                    type: boolean
+                  score:
+                    type: number
+                  max_score:
+                    type: number
+                  feedback:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        question_id:
+                          type: string
+                          format: uuid
+                        earned:
+                          type: number
+                        max:
+                          type: number
+                        correct:
+                          type: boolean
+                        message:
+                          type: string
+          description: ''
+  /api/attempts/{id}/:
+    get:
+      operationId: attempts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module attempt.
+        required: true
+      tags:
+      - attempts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleAttempt'
+          description: ''
+    put:
+      operationId: attempts_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module attempt.
+        required: true
+      tags:
+      - attempts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/ModuleAttempt'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleAttempt'
+          description: ''
+    patch:
+      operationId: attempts_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module attempt.
+        required: true
+      tags:
+      - attempts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedModuleAttempt'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedModuleAttempt'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedModuleAttempt'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModuleAttempt'
+          description: ''
+    delete:
+      operationId: attempts_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module attempt.
+        required: true
+      tags:
+      - attempts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/auth/token/:
+    post:
+      operationId: auth_token_create
+      description: |-
+        Takes a set of user credentials and returns an access and refresh JSON web
+        token pair to prove the authentication of those credentials.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenObtainPair'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenObtainPair'
+          description: ''
+  /api/auth/token/refresh/:
+    post:
+      operationId: auth_token_refresh_create
+      description: |-
+        Takes a refresh type JSON web token and returns an access type JSON web
+        token if the refresh token is valid.
+      tags:
+      - auth
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TokenRefresh'
+        required: true
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenRefresh'
+          description: ''
+  /api/badges/:
+    get:
+      operationId: badges_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - badges
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedBadgeList'
+          description: ''
+    post:
+      operationId: badges_create
+      tags:
+      - badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Badge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Badge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Badge'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Badge'
+          description: ''
+  /api/badges/{id}/:
+    get:
+      operationId: badges_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this badge.
+        required: true
+      tags:
+      - badges
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Badge'
+          description: ''
+    put:
+      operationId: badges_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this badge.
+        required: true
+      tags:
+      - badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Badge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Badge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Badge'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Badge'
+          description: ''
+    patch:
+      operationId: badges_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this badge.
+        required: true
+      tags:
+      - badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedBadge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedBadge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedBadge'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Badge'
+          description: ''
+    delete:
+      operationId: badges_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this badge.
+        required: true
+      tags:
+      - badges
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/departments/:
+    get:
+      operationId: departments_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - departments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedDepartmentList'
+          description: ''
+    post:
+      operationId: departments_create
+      tags:
+      - departments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Department'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Department'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Department'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+          description: ''
+  /api/departments/{id}/:
+    get:
+      operationId: departments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this department.
+        required: true
+      tags:
+      - departments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+          description: ''
+    put:
+      operationId: departments_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this department.
+        required: true
+      tags:
+      - departments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Department'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Department'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Department'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+          description: ''
+    patch:
+      operationId: departments_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this department.
+        required: true
+      tags:
+      - departments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedDepartment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedDepartment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedDepartment'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Department'
+          description: ''
+    delete:
+      operationId: departments_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this department.
+        required: true
+      tags:
+      - departments
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/leaderboard/:
+    get:
+      operationId: leaderboard_list
+      description: Simple org leaderboard by total XP.
+      tags:
+      - leaderboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+          description: ''
+  /api/leaderboard.csv:
+    get:
+      operationId: leaderboard.csv_retrieve
+      description: Download the current org leaderboard as CSV (rank, user, xp, level).
+      tags:
+      - leaderboard.csv
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+  /api/leaderboard/group/:
+    get:
+      operationId: leaderboard_group_retrieve
+      description: Leaderboard grouped by Department and Team (within current org).
+      tags:
+      - leaderboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  departments:
+                    type: array
+                    items:
+                      type: object
+                  teams:
+                    type: array
+                    items:
+                      type: object
+          description: ''
+  /api/leaderboard/role/{role_id}/:
+    get:
+      operationId: leaderboard_role_list
+      description: Leaderboard by XP for users assigned to a specific JobRole in your
+        org.
+      parameters:
+      - in: path
+        name: role_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - leaderboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+          description: ''
+  /api/leaderboard/skill/{skill_id}/:
+    get:
+      operationId: leaderboard_skill_list
+      description: Leaderboard by XP for a specific skill in the current org.
+      parameters:
+      - in: path
+        name: skill_id
+        schema:
+          type: string
+        required: true
+      tags:
+      - leaderboard
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/LeaderboardEntry'
+          description: ''
+  /api/levels/:
+    get:
+      operationId: levels_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - levels
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedLevelDefList'
+          description: ''
+    post:
+      operationId: levels_create
+      tags:
+      - levels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDef'
+          description: ''
+  /api/levels/{level}/:
+    get:
+      operationId: levels_retrieve
+      parameters:
+      - in: path
+        name: level
+        schema:
+          type: integer
+        description: A unique value identifying this level def.
+        required: true
+      tags:
+      - levels
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDef'
+          description: ''
+    put:
+      operationId: levels_update
+      parameters:
+      - in: path
+        name: level
+        schema:
+          type: integer
+        description: A unique value identifying this level def.
+        required: true
+      tags:
+      - levels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/LevelDef'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDef'
+          description: ''
+    patch:
+      operationId: levels_partial_update
+      parameters:
+      - in: path
+        name: level
+        schema:
+          type: integer
+        description: A unique value identifying this level def.
+        required: true
+      tags:
+      - levels
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedLevelDef'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedLevelDef'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedLevelDef'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LevelDef'
+          description: ''
+    delete:
+      operationId: levels_destroy
+      parameters:
+      - in: path
+        name: level
+        schema:
+          type: integer
+        description: A unique value identifying this level def.
+        required: true
+      tags:
+      - levels
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/me/progress/:
+    get:
+      operationId: me_progress_retrieve
+      description: Current user's XP and level summary.
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Progress'
+          description: ''
+  /api/me/whoami/:
+    get:
+      operationId: me_whoami_retrieve
+      description: Return logged-in user's username and biz_role.
+      tags:
+      - me
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/WhoAmI'
+          description: ''
+  /api/modules/:
+    get:
+      operationId: modules_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - modules
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedModuleList'
+          description: ''
+    post:
+      operationId: modules_create
+      tags:
+      - modules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Module'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Module'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Module'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: ''
+  /api/modules/{module_id}/start/:
+    post:
+      operationId: modules_start_create
+      description: 'Start a quiz attempt: backend selects & shuffles questions/choices.
+        Returns attempt_id and the served questions.'
+      parameters:
+      - in: path
+        name: module_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - modules
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StartAttempt'
+          description: ''
+  /api/modules/{id}/:
+    get:
+      operationId: modules_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module.
+        required: true
+      tags:
+      - modules
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: ''
+    put:
+      operationId: modules_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module.
+        required: true
+      tags:
+      - modules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Module'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Module'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Module'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: ''
+    patch:
+      operationId: modules_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module.
+        required: true
+      tags:
+      - modules
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedModule'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedModule'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedModule'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Module'
+          description: ''
+    delete:
+      operationId: modules_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this module.
+        required: true
+      tags:
+      - modules
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/orgs/:
+    get:
+      operationId: orgs_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - orgs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedOrgList'
+          description: ''
+    post:
+      operationId: orgs_create
+      tags:
+      - orgs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Org'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Org'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Org'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+          description: ''
+  /api/orgs/{id}/:
+    get:
+      operationId: orgs_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this org.
+        required: true
+      tags:
+      - orgs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+          description: ''
+    put:
+      operationId: orgs_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this org.
+        required: true
+      tags:
+      - orgs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Org'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Org'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Org'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+          description: ''
+    patch:
+      operationId: orgs_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this org.
+        required: true
+      tags:
+      - orgs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedOrg'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedOrg'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedOrg'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Org'
+          description: ''
+    delete:
+      operationId: orgs_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this org.
+        required: true
+      tags:
+      - orgs
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/recerts/:
+    get:
+      operationId: recerts_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - recerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRecertRequirementList'
+          description: ''
+    post:
+      operationId: recerts_create
+      tags:
+      - recerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecertRequirement'
+          description: ''
+  /api/recerts/{id}/:
+    get:
+      operationId: recerts_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this recert requirement.
+        required: true
+      tags:
+      - recerts
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecertRequirement'
+          description: ''
+    put:
+      operationId: recerts_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this recert requirement.
+        required: true
+      tags:
+      - recerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RecertRequirement'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecertRequirement'
+          description: ''
+    patch:
+      operationId: recerts_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this recert requirement.
+        required: true
+      tags:
+      - recerts
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRecertRequirement'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRecertRequirement'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRecertRequirement'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RecertRequirement'
+          description: ''
+    delete:
+      operationId: recerts_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this recert requirement.
+        required: true
+      tags:
+      - recerts
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/role-assignments/:
+    get:
+      operationId: role_assignments_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - role-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoleAssignmentList'
+          description: ''
+    post:
+      operationId: role_assignments_create
+      tags:
+      - role-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+          description: ''
+  /api/role-assignments/{id}/:
+    get:
+      operationId: role_assignments_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this role assignment.
+        required: true
+      tags:
+      - role-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+          description: ''
+    put:
+      operationId: role_assignments_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this role assignment.
+        required: true
+      tags:
+      - role-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleAssignment'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+          description: ''
+    patch:
+      operationId: role_assignments_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this role assignment.
+        required: true
+      tags:
+      - role-assignments
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleAssignment'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleAssignment'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleAssignment'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleAssignment'
+          description: ''
+    delete:
+      operationId: role_assignments_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this role assignment.
+        required: true
+      tags:
+      - role-assignments
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/role-skills/:
+    get:
+      operationId: role_skills_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - role-skills
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedRoleSkillList'
+          description: ''
+    post:
+      operationId: role_skills_create
+      tags:
+      - role-skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleSkill'
+          description: ''
+  /api/role-skills/{id}/:
+    get:
+      operationId: role_skills_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this role skill.
+        required: true
+      tags:
+      - role-skills
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleSkill'
+          description: ''
+    put:
+      operationId: role_skills_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this role skill.
+        required: true
+      tags:
+      - role-skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/RoleSkill'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleSkill'
+          description: ''
+    patch:
+      operationId: role_skills_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this role skill.
+        required: true
+      tags:
+      - role-skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleSkill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleSkill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedRoleSkill'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleSkill'
+          description: ''
+    delete:
+      operationId: role_skills_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: integer
+        description: A unique integer value identifying this role skill.
+        required: true
+      tags:
+      - role-skills
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/roles/:
+    get:
+      operationId: roles_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - roles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedJobRoleList'
+          description: ''
+    post:
+      operationId: roles_create
+      tags:
+      - roles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRole'
+          description: ''
+  /api/roles/{id}/:
+    get:
+      operationId: roles_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this job role.
+        required: true
+      tags:
+      - roles
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRole'
+          description: ''
+    put:
+      operationId: roles_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this job role.
+        required: true
+      tags:
+      - roles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/JobRole'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRole'
+          description: ''
+    patch:
+      operationId: roles_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this job role.
+        required: true
+      tags:
+      - roles
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedJobRole'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedJobRole'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedJobRole'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobRole'
+          description: ''
+    delete:
+      operationId: roles_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this job role.
+        required: true
+      tags:
+      - roles
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/signoffs/:
+    get:
+      operationId: signoffs_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - signoffs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSupervisorSignoffList'
+          description: ''
+    post:
+      operationId: signoffs_create
+      tags:
+      - signoffs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupervisorSignoff'
+          description: ''
+  /api/signoffs/{id}/:
+    get:
+      operationId: signoffs_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this supervisor signoff.
+        required: true
+      tags:
+      - signoffs
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupervisorSignoff'
+          description: ''
+    put:
+      operationId: signoffs_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this supervisor signoff.
+        required: true
+      tags:
+      - signoffs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SupervisorSignoff'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupervisorSignoff'
+          description: ''
+    patch:
+      operationId: signoffs_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this supervisor signoff.
+        required: true
+      tags:
+      - signoffs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSupervisorSignoff'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSupervisorSignoff'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSupervisorSignoff'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SupervisorSignoff'
+          description: ''
+    delete:
+      operationId: signoffs_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this supervisor signoff.
+        required: true
+      tags:
+      - signoffs
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/skills/:
+    get:
+      operationId: skills_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - skills
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSkillList'
+          description: ''
+    post:
+      operationId: skills_create
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Skill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Skill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Skill'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: ''
+  /api/skills/{id}/:
+    get:
+      operationId: skills_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this skill.
+        required: true
+      tags:
+      - skills
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: ''
+    put:
+      operationId: skills_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this skill.
+        required: true
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Skill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Skill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Skill'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: ''
+    patch:
+      operationId: skills_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this skill.
+        required: true
+      tags:
+      - skills
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSkill'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSkill'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSkill'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Skill'
+          description: ''
+    delete:
+      operationId: skills_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this skill.
+        required: true
+      tags:
+      - skills
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/sops/:
+    get:
+      operationId: sops_list
+      parameters:
+      - in: query
+        name: active
+        schema:
+          type: boolean
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - in: query
+        name: org
+        schema:
+          type: string
+          format: uuid
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - sops
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedSOPList'
+          description: ''
+    post:
+      operationId: sops_create
+      tags:
+      - sops
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SOP'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SOP'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOP'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOP'
+          description: ''
+  /api/sops/{id}/:
+    get:
+      operationId: sops_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sop.
+        required: true
+      tags:
+      - sops
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOP'
+          description: ''
+    put:
+      operationId: sops_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sop.
+        required: true
+      tags:
+      - sops
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SOP'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SOP'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOP'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOP'
+          description: ''
+    patch:
+      operationId: sops_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sop.
+        required: true
+      tags:
+      - sops
+      requestBody:
+        content:
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedSOP'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedSOP'
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedSOP'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOP'
+          description: ''
+    delete:
+      operationId: sops_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this sop.
+        required: true
+      tags:
+      - sops
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/sops/{sop_id}/view/:
+    post:
+      operationId: sops_view_create
+      description: Track video/pdf/presentation progress for a SOP.
+      parameters:
+      - in: path
+        name: sop_id
+        schema:
+          type: string
+          format: uuid
+        required: true
+      tags:
+      - sops
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SOPView'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/SOPView'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/SOPView'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SOPView'
+          description: ''
+  /api/team-members/:
+    get:
+      operationId: team_members_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - team-members
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamMemberList'
+          description: ''
+    post:
+      operationId: team_members_create
+      tags:
+      - team-members
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+          description: ''
+  /api/team-members/{id}/:
+    get:
+      operationId: team_members_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team member.
+        required: true
+      tags:
+      - team-members
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+          description: ''
+    put:
+      operationId: team_members_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team member.
+        required: true
+      tags:
+      - team-members
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/TeamMember'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+          description: ''
+    patch:
+      operationId: team_members_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team member.
+        required: true
+      tags:
+      - team-members
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTeamMember'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTeamMember'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTeamMember'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TeamMember'
+          description: ''
+    delete:
+      operationId: team_members_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team member.
+        required: true
+      tags:
+      - team-members
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/teams/:
+    get:
+      operationId: teams_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - teams
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedTeamList'
+          description: ''
+    post:
+      operationId: teams_create
+      tags:
+      - teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Team'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Team'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Team'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+          description: ''
+  /api/teams/{id}/:
+    get:
+      operationId: teams_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+          description: ''
+    put:
+      operationId: teams_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Team'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/Team'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/Team'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+          description: ''
+    patch:
+      operationId: teams_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedTeam'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedTeam'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedTeam'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Team'
+          description: ''
+    delete:
+      operationId: teams_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this team.
+        required: true
+      tags:
+      - teams
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/user-badges/:
+    get:
+      operationId: user_badges_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - user-badges
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserBadgeList'
+          description: ''
+    post:
+      operationId: user_badges_create
+      tags:
+      - user-badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBadge'
+          description: ''
+  /api/user-badges/{id}/:
+    get:
+      operationId: user_badges_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user badge.
+        required: true
+      tags:
+      - user-badges
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBadge'
+          description: ''
+    put:
+      operationId: user_badges_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user badge.
+        required: true
+      tags:
+      - user-badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/UserBadge'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBadge'
+          description: ''
+    patch:
+      operationId: user_badges_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user badge.
+        required: true
+      tags:
+      - user-badges
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUserBadge'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUserBadge'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUserBadge'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserBadge'
+          description: ''
+    delete:
+      operationId: user_badges_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user badge.
+        required: true
+      tags:
+      - user-badges
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/users/:
+    get:
+      operationId: users_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedUserList'
+          description: ''
+    post:
+      operationId: users_create
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+  /api/users/{id}/:
+    get:
+      operationId: users_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    put:
+      operationId: users_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/User'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/User'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/User'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    patch:
+      operationId: users_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedUser'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+          description: ''
+    delete:
+      operationId: users_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this user.
+        required: true
+      tags:
+      - users
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/xp/:
+    get:
+      operationId: xp_list
+      parameters:
+      - name: ordering
+        required: false
+        in: query
+        description: Which field to use when ordering the results.
+        schema:
+          type: string
+      - name: page
+        required: false
+        in: query
+        description: A page number within the paginated result set.
+        schema:
+          type: integer
+      - name: search
+        required: false
+        in: query
+        description: A search term.
+        schema:
+          type: string
+      tags:
+      - xp
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PaginatedXPEventList'
+          description: ''
+    post:
+      operationId: xp_create
+      tags:
+      - xp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '201':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPEvent'
+          description: ''
+  /api/xp/{id}/:
+    get:
+      operationId: xp_retrieve
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this xp event.
+        required: true
+      tags:
+      - xp
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPEvent'
+          description: ''
+    put:
+      operationId: xp_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this xp event.
+        required: true
+      tags:
+      - xp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/XPEvent'
+        required: true
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPEvent'
+          description: ''
+    patch:
+      operationId: xp_partial_update
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this xp event.
+        required: true
+      tags:
+      - xp
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PatchedXPEvent'
+          application/x-www-form-urlencoded:
+            schema:
+              $ref: '#/components/schemas/PatchedXPEvent'
+          multipart/form-data:
+            schema:
+              $ref: '#/components/schemas/PatchedXPEvent'
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/XPEvent'
+          description: ''
+    delete:
+      operationId: xp_destroy
+      parameters:
+      - in: path
+        name: id
+        schema:
+          type: string
+          format: uuid
+        description: A UUID string identifying this xp event.
+        required: true
+      tags:
+      - xp
+      security:
+      - jwtAuth: []
+      responses:
+        '204':
+          description: No response body
+  /api/xp/export.csv:
+    get:
+      operationId: xp_export.csv_retrieve
+      description: Export raw XP events for your org (CSV). Managers/admins only.
+      tags:
+      - xp
+      security:
+      - jwtAuth: []
+      responses:
+        '200':
+          description: No response body
+components:
+  schemas:
+    Badge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        code:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        rule_type:
+          $ref: '#/components/schemas/RuleTypeEnum'
+        value:
+          type: integer
+        skill:
+          type: string
+          format: uuid
+          nullable: true
+        skill_name:
+          type: string
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          nullable: true
+        team_name:
+          type: string
+          readOnly: true
+        department:
+          type: string
+          format: uuid
+          nullable: true
+        department_name:
+          type: string
+          readOnly: true
+        icon:
+          type: string
+          maxLength: 200
+      required:
+      - code
+      - department_name
+      - id
+      - name
+      - org
+      - rule_type
+      - skill_name
+      - team_name
+    BlankEnum:
+      enum:
+      - ''
+    ChoicePublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        text:
+          type: string
+          maxLength: 400
+      required:
+      - id
+      - text
+    Department:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        org:
+          type: string
+          format: uuid
+      required:
+      - id
+      - name
+      - org
+    JobRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        is_active:
+          type: boolean
+        org:
+          type: string
+          format: uuid
+      required:
+      - id
+      - name
+      - org
+    LeaderboardEntry:
+      type: object
+      properties:
+        rank:
+          type: integer
+        user_id:
+          type: string
+          format: uuid
+        username:
+          type: string
+        overall_xp:
+          type: integer
+        level:
+          type: integer
+      required:
+      - level
+      - overall_xp
+      - rank
+      - user_id
+      - username
+    LevelDef:
+      type: object
+      properties:
+        level:
+          type: integer
+        total_xp:
+          type: integer
+      required:
+      - level
+      - total_xp
+    MediaTypeEnum:
+      enum:
+      - video
+      - pdf
+      - pptx
+      - link
+      type: string
+      description: |-
+        * `video` - video
+        * `pdf` - pdf
+        * `pptx` - pptx
+        * `link` - link
+    Module:
+      type: object
+      description: Expose module with (read-only) public questions for dashboard/preview.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        skill:
+          type: string
+          format: uuid
+        sop:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          maxLength: 200
+        difficulty:
+          type: integer
+        active:
+          type: boolean
+        pass_mark:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionPublic'
+          readOnly: true
+        passing_score:
+          type: integer
+        require_viewed:
+          type: boolean
+        question_pool_count:
+          type: integer
+          nullable: true
+        shuffle_questions:
+          type: boolean
+        shuffle_choices:
+          type: boolean
+        negative_marking:
+          type: boolean
+      required:
+      - id
+      - org
+      - questions
+      - skill
+      - title
+    ModuleAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        module:
+          type: string
+          format: uuid
+        module_title:
+          type: string
+          readOnly: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        score:
+          type: integer
+        passed:
+          type: boolean
+        answers: {}
+        presented_questions: {}
+        choice_order: {}
+      required:
+      - id
+      - module
+      - module_title
+      - user
+    Org:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+      required:
+      - id
+      - name
+    PaginatedBadgeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Badge'
+    PaginatedDepartmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Department'
+    PaginatedJobRoleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobRole'
+    PaginatedLevelDefList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/LevelDef'
+    PaginatedModuleAttemptList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/ModuleAttempt'
+    PaginatedModuleList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Module'
+    PaginatedOrgList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Org'
+    PaginatedRecertRequirementList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RecertRequirement'
+    PaginatedRoleAssignmentList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleAssignment'
+    PaginatedRoleSkillList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/RoleSkill'
+    PaginatedSOPList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SOP'
+    PaginatedSkillList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Skill'
+    PaginatedSupervisorSignoffList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/SupervisorSignoff'
+    PaginatedTeamList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/Team'
+    PaginatedTeamMemberList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/TeamMember'
+    PaginatedUserBadgeList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/UserBadge'
+    PaginatedUserList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/User'
+    PaginatedXPEventList:
+      type: object
+      required:
+      - count
+      - results
+      properties:
+        count:
+          type: integer
+          example: 123
+        next:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=4
+        previous:
+          type: string
+          nullable: true
+          format: uri
+          example: http://api.example.org/accounts/?page=2
+        results:
+          type: array
+          items:
+            $ref: '#/components/schemas/XPEvent'
+    PatchedBadge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        code:
+          type: string
+          maxLength: 50
+        name:
+          type: string
+          maxLength: 120
+        description:
+          type: string
+        rule_type:
+          $ref: '#/components/schemas/RuleTypeEnum'
+        value:
+          type: integer
+        skill:
+          type: string
+          format: uuid
+          nullable: true
+        skill_name:
+          type: string
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+          nullable: true
+        team_name:
+          type: string
+          readOnly: true
+        department:
+          type: string
+          format: uuid
+          nullable: true
+        department_name:
+          type: string
+          readOnly: true
+        icon:
+          type: string
+          maxLength: 200
+    PatchedDepartment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        org:
+          type: string
+          format: uuid
+    PatchedJobRole:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        is_active:
+          type: boolean
+        org:
+          type: string
+          format: uuid
+    PatchedLevelDef:
+      type: object
+      properties:
+        level:
+          type: integer
+        total_xp:
+          type: integer
+    PatchedModule:
+      type: object
+      description: Expose module with (read-only) public questions for dashboard/preview.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        skill:
+          type: string
+          format: uuid
+        sop:
+          type: string
+          format: uuid
+          nullable: true
+        title:
+          type: string
+          maxLength: 200
+        difficulty:
+          type: integer
+        active:
+          type: boolean
+        pass_mark:
+          type: integer
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionPublic'
+          readOnly: true
+        passing_score:
+          type: integer
+        require_viewed:
+          type: boolean
+        question_pool_count:
+          type: integer
+          nullable: true
+        shuffle_questions:
+          type: boolean
+        shuffle_choices:
+          type: boolean
+        negative_marking:
+          type: boolean
+    PatchedModuleAttempt:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        module:
+          type: string
+          format: uuid
+        module_title:
+          type: string
+          readOnly: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        score:
+          type: integer
+        passed:
+          type: boolean
+        answers: {}
+        presented_questions: {}
+        choice_order: {}
+    PatchedOrg:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 200
+    PatchedRecertRequirement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        meta: {}
+    PatchedRoleAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        username:
+          type: string
+          readOnly: true
+        role:
+          type: string
+          format: uuid
+        role_name:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          default: true
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedRoleSkill:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        role:
+          type: string
+          format: uuid
+        role_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        required:
+          type: boolean
+    PatchedSOP:
+      type: object
+      description: Includes media fields for video/pdf/pptx/link.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        media_url:
+          type: string
+          readOnly: true
+        code:
+          type: string
+          maxLength: 50
+        title:
+          type: string
+          maxLength: 200
+        version_major:
+          type: integer
+          default: 1
+        version_minor:
+          type: integer
+          default: 0
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        content: {}
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        change_note:
+          type: string
+        media_type:
+          $ref: '#/components/schemas/MediaTypeEnum'
+        media_file:
+          type: string
+          format: uri
+          nullable: true
+          pattern: (?:mp4|mov|mkv|pdf|pptx|ppt)$
+        external_url:
+          type: string
+          format: uri
+          nullable: true
+          maxLength: 200
+        duration_seconds:
+          type: integer
+          nullable: true
+        pages:
+          type: integer
+          nullable: true
+        thumbnail:
+          type: string
+          format: uri
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        published_by:
+          type: string
+          format: uuid
+          nullable: true
+    PatchedSkill:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        risk_level:
+          $ref: '#/components/schemas/RiskLevelEnum'
+        valid_for_days:
+          type: integer
+        org:
+          type: string
+          format: uuid
+    PatchedSupervisorSignoff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        supervisor:
+          type: string
+          format: uuid
+        supervisor_name:
+          type: string
+          readOnly: true
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedTeam:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        department:
+          type: string
+          format: uuid
+          nullable: true
+        department_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+    PatchedTeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        username:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          default: true
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+    PatchedUser:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        org:
+          type: string
+          format: uuid
+          nullable: true
+        org_name:
+          type: string
+          readOnly: true
+        biz_role:
+          type: string
+          maxLength: 20
+    PatchedUserBadge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        badge:
+          allOf:
+          - $ref: '#/components/schemas/Badge'
+          readOnly: true
+        badge_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        awarded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        meta: {}
+    PatchedXPEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        username:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+          nullable: true
+        skill_name:
+          type: string
+          readOnly: true
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        amount:
+          type: integer
+        meta: {}
+    Progress:
+      type: object
+      properties:
+        overall_xp:
+          type: integer
+        overall_level:
+          type: integer
+        next_level:
+          type: integer
+        xp_to_next:
+          type: integer
+        skills:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProgressSkill'
+      required:
+      - next_level
+      - overall_level
+      - overall_xp
+      - skills
+      - xp_to_next
+    ProgressSkill:
+      type: object
+      properties:
+        skill_id:
+          type: string
+          format: uuid
+          nullable: true
+        skill_name:
+          type: string
+          nullable: true
+        xp:
+          type: integer
+      required:
+      - skill_id
+      - skill_name
+      - xp
+    QtypeEnum:
+      enum:
+      - single
+      - multi
+      - truefalse
+      type: string
+      description: |-
+        * `single` - single
+        * `multi` - multi
+        * `truefalse` - truefalse
+    QuestionPublic:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        qtype:
+          $ref: '#/components/schemas/QtypeEnum'
+        text:
+          type: string
+        points:
+          type: integer
+        choices:
+          type: array
+          items:
+            $ref: '#/components/schemas/ChoicePublic'
+          readOnly: true
+      required:
+      - choices
+      - id
+      - text
+    ReasonEnum:
+      enum:
+      - expiry
+      - sop_major_update
+      type: string
+      description: |-
+        * `expiry` - expiry
+        * `sop_major_update` - sop_major_update
+    RecertRequirement:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        due_at:
+          type: string
+          format: date-time
+          nullable: true
+        reason:
+          oneOf:
+          - $ref: '#/components/schemas/ReasonEnum'
+          - $ref: '#/components/schemas/BlankEnum'
+        meta: {}
+      required:
+      - id
+      - skill
+      - skill_name
+      - user
+      - user_name
+    RiskLevelEnum:
+      enum:
+      - low
+      - med
+      - high
+      type: string
+      description: |-
+        * `low` - low
+        * `med` - med
+        * `high` - high
+    RoleAssignment:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        username:
+          type: string
+          readOnly: true
+        role:
+          type: string
+          format: uuid
+        role_name:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          default: true
+        assigned_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - assigned_at
+      - id
+      - role
+      - role_name
+      - user
+      - user_id
+      - username
+    RoleSkill:
+      type: object
+      properties:
+        id:
+          type: integer
+          readOnly: true
+        role:
+          type: string
+          format: uuid
+        role_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        required:
+          type: boolean
+      required:
+      - id
+      - role
+      - role_name
+      - skill
+      - skill_name
+    RuleTypeEnum:
+      enum:
+      - overall_xp_at_least
+      - skill_xp_at_least
+      - signoffs_at_least
+      - team_total_xp_at_least
+      - department_total_xp_at_least
+      - team_member_count_with_xp_at_least
+      type: string
+      description: |-
+        * `overall_xp_at_least` - overall_xp_at_least
+        * `skill_xp_at_least` - skill_xp_at_least
+        * `signoffs_at_least` - signoffs_at_least
+        * `team_total_xp_at_least` - team_total_xp_at_least
+        * `department_total_xp_at_least` - department_total_xp_at_least
+        * `team_member_count_with_xp_at_least` - team_member_count_with_xp_at_least
+    SOP:
+      type: object
+      description: Includes media fields for video/pdf/pptx/link.
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        media_url:
+          type: string
+          readOnly: true
+        code:
+          type: string
+          maxLength: 50
+        title:
+          type: string
+          maxLength: 200
+        version_major:
+          type: integer
+          default: 1
+        version_minor:
+          type: integer
+          default: 0
+        status:
+          $ref: '#/components/schemas/StatusEnum'
+        content: {}
+        published_at:
+          type: string
+          format: date-time
+          nullable: true
+        change_note:
+          type: string
+        media_type:
+          $ref: '#/components/schemas/MediaTypeEnum'
+        media_file:
+          type: string
+          format: uri
+          nullable: true
+          pattern: (?:mp4|mov|mkv|pdf|pptx|ppt)$
+        external_url:
+          type: string
+          format: uri
+          nullable: true
+          maxLength: 200
+        duration_seconds:
+          type: integer
+          nullable: true
+        pages:
+          type: integer
+          nullable: true
+        thumbnail:
+          type: string
+          format: uri
+          nullable: true
+        active:
+          type: boolean
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        reviewed_by:
+          type: string
+          format: uuid
+          nullable: true
+        published_by:
+          type: string
+          format: uuid
+          nullable: true
+      required:
+      - code
+      - created_at
+      - id
+      - media_url
+      - org
+      - title
+    SOPView:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        sop:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+          readOnly: true
+        seconds_viewed:
+          type: integer
+        pages_viewed:
+          type: integer
+        progress:
+          type: number
+          format: double
+        completed:
+          type: boolean
+        last_heartbeat:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - last_heartbeat
+      - sop
+      - user
+    Skill:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+        risk_level:
+          $ref: '#/components/schemas/RiskLevelEnum'
+        valid_for_days:
+          type: integer
+        org:
+          type: string
+          format: uuid
+      required:
+      - id
+      - name
+      - org
+    SourceEnum:
+      enum:
+      - module_pass
+      - quiz
+      - streak
+      - supervisor_signoff
+      - evidence
+      type: string
+      description: |-
+        * `module_pass` - module_pass
+        * `quiz` - quiz
+        * `streak` - streak
+        * `supervisor_signoff` - supervisor_signoff
+        * `evidence` - evidence
+    StartAttempt:
+      type: object
+      properties:
+        attempt_id:
+          type: string
+          format: uuid
+        module_id:
+          type: string
+          format: uuid
+        questions:
+          type: array
+          items:
+            $ref: '#/components/schemas/QuestionPublic'
+      required:
+      - attempt_id
+      - module_id
+      - questions
+    StatusEnum:
+      enum:
+      - draft
+      - review
+      - published
+      - retired
+      type: string
+      description: |-
+        * `draft` - draft
+        * `review` - review
+        * `published` - published
+        * `retired` - retired
+    SubmitAnswer:
+      type: object
+      properties:
+        question_id:
+          type: string
+          format: uuid
+        choice_ids:
+          type: array
+          items:
+            type: string
+            format: uuid
+      required:
+      - choice_ids
+      - question_id
+    SubmitAttemptRequest:
+      type: object
+      properties:
+        answers:
+          type: array
+          items:
+            $ref: '#/components/schemas/SubmitAnswer'
+      required:
+      - answers
+    SupervisorSignoff:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        user_name:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+        skill_name:
+          type: string
+          readOnly: true
+        supervisor:
+          type: string
+          format: uuid
+        supervisor_name:
+          type: string
+          readOnly: true
+        note:
+          type: string
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - created_at
+      - id
+      - skill
+      - skill_name
+      - supervisor
+      - supervisor_name
+      - user
+      - user_name
+    Team:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        department:
+          type: string
+          format: uuid
+          nullable: true
+        department_name:
+          type: string
+          readOnly: true
+        name:
+          type: string
+          maxLength: 120
+      required:
+      - department_name
+      - id
+      - name
+      - org
+    TeamMember:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        team:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        user_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        username:
+          type: string
+          readOnly: true
+        active:
+          type: boolean
+          default: true
+        joined_at:
+          type: string
+          format: date-time
+          readOnly: true
+      required:
+      - id
+      - joined_at
+      - team
+      - user
+      - user_id
+      - username
+    TokenObtainPair:
+      type: object
+      properties:
+        username:
+          type: string
+          writeOnly: true
+        password:
+          type: string
+          writeOnly: true
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          readOnly: true
+      required:
+      - access
+      - password
+      - refresh
+      - username
+    TokenRefresh:
+      type: object
+      properties:
+        access:
+          type: string
+          readOnly: true
+        refresh:
+          type: string
+          writeOnly: true
+      required:
+      - access
+      - refresh
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        username:
+          type: string
+          description: Required. 150 characters or fewer. Letters, digits and @/./+/-/_
+            only.
+          pattern: ^[\w.@+-]+$
+          maxLength: 150
+        email:
+          type: string
+          format: email
+          title: Email address
+          maxLength: 254
+        org:
+          type: string
+          format: uuid
+          nullable: true
+        org_name:
+          type: string
+          readOnly: true
+        biz_role:
+          type: string
+          maxLength: 20
+      required:
+      - id
+      - org_name
+      - username
+    UserBadge:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        user:
+          type: string
+          format: uuid
+        badge:
+          allOf:
+          - $ref: '#/components/schemas/Badge'
+          readOnly: true
+        badge_id:
+          type: string
+          format: uuid
+          writeOnly: true
+        awarded_at:
+          type: string
+          format: date-time
+          readOnly: true
+        meta: {}
+      required:
+      - awarded_at
+      - badge
+      - badge_id
+      - id
+      - user
+    WhoAmI:
+      type: object
+      properties:
+        username:
+          type: string
+        biz_role:
+          type: string
+          nullable: true
+      required:
+      - biz_role
+      - username
+    XPEvent:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+          readOnly: true
+        created_at:
+          type: string
+          format: date-time
+          readOnly: true
+        org:
+          type: string
+          format: uuid
+        user:
+          type: string
+          format: uuid
+        username:
+          type: string
+          readOnly: true
+        skill:
+          type: string
+          format: uuid
+          nullable: true
+        skill_name:
+          type: string
+          readOnly: true
+        source:
+          $ref: '#/components/schemas/SourceEnum'
+        amount:
+          type: integer
+        meta: {}
+      required:
+      - amount
+      - created_at
+      - id
+      - org
+      - skill_name
+      - source
+      - user
+      - username
+  securitySchemes:
+    jwtAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT

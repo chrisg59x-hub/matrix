@@ -96,7 +96,7 @@ class SOPViewSet(viewsets.ModelViewSet):
 
     # Nice APIs for list views:
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['org', 'type', 'active']  # adjust to your fields
+    filterset_fields = ['org', 'active']  # adjust to your fields
     search_fields = ['title', 'code', 'description']  # adjust
     ordering_fields = ['created_at', 'title', 'id']   # adjust
     ordering = ['-created_at']  # default list order

@@ -2,7 +2,7 @@
 import uuid
 from django.conf import settings
 from django.db import models
-
+from accounts.models import Org, User
 # import math
 
 # from django.utils import timezone
@@ -135,12 +135,18 @@ class SupervisorSignoff(models.Model):
 class RecertRequirement(models.Model):
     REASON = [("expiry", "expiry"), ("sop_major_update", "sop_major_update")]
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
-    skill = models.ForeignKey(Skill, on_delete=models.CASCADE)
+    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="recert_requirements")
+    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recert_requirements")
+    skill = models.ForeignKey("Skill", on_delete=models.CASCADE, related_name="recert_requirements")
     due_date = models.DateField()
-    reason = models.CharField(max_length=30, choices=REASON)
+    due_at = models.DateTimeField(null=True, blank=True)
+    reason = models.CharField(max_length=30, choices=REASON, blank=True)
     resolved = models.BooleanField(default=False)
 
+    meta = models.JSONField(default=dict, blank=True)
+
+    def __str__(self):
+        return f"{self.user} recert for {self.skill} (due {self.due_at})"
 
 # ---- Levels & Badges --------------------------------------------------------
 
