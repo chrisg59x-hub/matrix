@@ -1,0 +1,13 @@
+{
+  "name": "matrix-demo",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "nuxt dev --port 5173 --hostname 127.0.0.1",
+    "build": "nuxt build",
+    "start": "nuxt start"
+  },
+  "dependencies": {
+    "nuxt": "^3.20.1"
+  }
+}
