@@ -34,6 +34,7 @@ from learning.models import (
     XPEvent,
 )
 from rest_framework import decorators, permissions, response, status, viewsets, filters, generics
+from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -198,28 +199,26 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
     permission_classes = [IsManagerForWrites]
 
 class MyOverdueSOPsView(generics.ListAPIView):
+    """
+    List overdue / outstanding recertification requirements for the current user.
+    Overdue = due_date < today AND resolved_at is null.
+    """
     serializer_class = RecertRequirementSerializer
     permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        today = timezone.localdate()
-        now = timezone.now()
+        today = timezone.now().date()
 
-        base_qs = RecertRequirement.objects.filter(
-            user=user,
-            resolved=False,          # ignore resolved / satisfied items
+        return (
+            RecertRequirement.objects
+            .filter(
+                user=user,
+                due_date__lt=today,      # <--- IMPORTANT: use due_date here
+                resolved_at__isnull=True
+            )
+            .select_related("skill", "sop")
         )
-
-        # Overdue if:
-        # - due_date is before today, OR
-        # - due_at is set and is in the past
-        overdue_qs = base_qs.filter(
-            Q(due_date__lt=today)
-            | Q(due_at__isnull=False, due_at__lte=now)
-        )
-
-        return overdue_qs.select_related("skill", "sop")
     
 class MeOverdueSopsView(generics.ListAPIView):
     """
