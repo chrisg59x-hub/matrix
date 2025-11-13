@@ -326,6 +326,7 @@ async function deleteSop(r:any) {
 </script>
 
 <template>
+  
   <div class="space-y-6">
     <h1 class="text-2xl font-bold">SOP Admin</h1>
     <p v-if="!canEdit" class="text-red-600">Manager or Admin only.</p>
