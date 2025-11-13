@@ -5,6 +5,7 @@
 import random
 import csv
 import io
+from datetime import timedelta
 # -----------------------------------------------------------------------------
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
@@ -235,6 +236,17 @@ def level_from_total_xp(xp: int) -> int:
     return int((xp or 0) ** 0.5 // 10)
 
 
+def _org_xp_queryset(request):
+    """
+    Convenience helper: XPEvent queryset scoped to the current user's org.
+    """
+    org_id = getattr(request.user, "org_id", None)
+    qs = XPEvent.objects.all()
+    if org_id:
+        qs = qs.filter(org_id=org_id)
+    return qs
+
+
 @extend_schema(responses=ProgressSerializer)
 @decorators.api_view(["GET"])
 @decorators.permission_classes([permissions.IsAuthenticated])
@@ -264,10 +276,9 @@ def my_progress(request):
 @decorators.api_view(["GET"])
 @decorators.permission_classes([permissions.IsAuthenticated])
 def leaderboard(request):
-    """Simple org leaderboard by total XP."""
-    org_id = getattr(request.user, "org_id", None)
+    """Simple org leaderboard by total XP (JSON)."""
     qs = (
-        XPEvent.objects.filter(org_id=org_id)
+        _org_xp_queryset(request)
         .values("user_id", "user__username")
         .annotate(overall_xp=Sum("amount"))
         .order_by("-overall_xp")
@@ -275,17 +286,169 @@ def leaderboard(request):
 
     results = []
     for rank, row in enumerate(qs, start=1):
-        results.append(
-            {
-                "rank": rank,
-                "user_id": row["user_id"],
-                "username": row["user__username"],
-                "overall_xp": row["overall_xp"] or 0,
-                "level": level_from_total_xp(row["overall_xp"]),
-            }
-        )
+        results.append({
+            "rank": rank,
+            "user_id": row["user_id"],
+            "username": row["user__username"],
+            "overall_xp": row["overall_xp"] or 0,
+            "level": level_from_total_xp(row["overall_xp"]),
+        })
     return response.Response(results)
 
+@extend_schema(
+    responses={200: {"type": "string", "format": "binary"}},
+    description="Download organisation leaderboard as CSV (rank, user, XP, level).",
+)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def leaderboard_csv(request):
+    """
+    CSV export of org leaderboard by total XP.
+    """
+    qs = (
+        _org_xp_queryset(request)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="leaderboard.csv"'
+
+    writer = csv.writer(resp)
+    writer.writerow(["rank", "user_id", "username", "overall_xp", "level"])
+
+    for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
+        writer.writerow([
+            rank,
+            row["user_id"],
+            row["user__username"],
+            xp,
+            level_from_total_xp(xp),
+        ])
+
+    return resp
+
+@extend_schema(
+    responses={200: {"type": "string", "format": "binary"}},
+    description=(
+        "Download raw XP events as CSV for the current org. "
+        "Optional query params: ?since_days=30 to limit to recent events."
+    ),
+)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def xp_events_csv(request):
+    """
+    CSV dump of XPEvent rows for the current org.
+    """
+    qs = _org_xp_queryset(request).select_related("user", "skill")
+
+    # Optional simple time filter: ?since_days=30
+    since_days = request.GET.get("since_days")
+    if since_days:
+        try:
+            days = int(since_days)
+            cutoff = timezone.now() - timedelta(days=days)
+            qs = qs.filter(created_at__gte=cutoff)
+        except ValueError:
+            pass  # ignore bad input, just return full queryset
+
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="xp_events.csv"'
+
+    writer = csv.writer(resp)
+    writer.writerow([
+        "id",
+        "created_at",
+        "user_id",
+        "username",
+        "skill_id",
+        "skill_name",
+        "amount",
+        "source",
+        "reason",
+    ])
+
+    for ev in qs.order_by("-created_at"):
+        writer.writerow([
+            ev.id,
+            ev.created_at.isoformat(),
+            ev.user_id,
+            getattr(ev.user, "username", ""),
+            ev.skill_id,
+            getattr(ev.skill, "name", "") if ev.skill_id else "",
+            ev.amount,
+            getattr(ev, "source", ""),
+            getattr(ev, "reason", ""),
+        ])
+
+    return resp
+
+@extend_schema(responses=LeaderboardEntrySerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def skill_leaderboard(request, skill_id):
+    """
+    Leaderboard for a single skill within the current org.
+    """
+    qs = (
+        _org_xp_queryset(request)
+        .filter(skill_id=skill_id)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
+    results = []
+    for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
+        results.append({
+            "rank": rank,
+            "user_id": row["user_id"],
+            "username": row["user__username"],
+            "overall_xp": xp,
+            "level": level_from_total_xp(xp),
+        })
+    return response.Response(results)
+
+
+@extend_schema(responses=LeaderboardEntrySerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def role_leaderboard(request, role_id):
+    """
+    Leaderboard for users assigned to a given JobRole (all skills).
+    """
+    # Import here to avoid circulars
+    from learning.models import RoleAssignment
+
+    user_ids = list(
+        RoleAssignment.objects
+        .filter(role_id=role_id)
+        .values_list("user_id", flat=True)
+    )
+
+    qs = (
+        _org_xp_queryset(request)
+        .filter(user_id__in=user_ids)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
+    results = []
+    for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
+        results.append({
+            "rank": rank,
+            "user_id": row["user_id"],
+            "username": row["user__username"],
+            "overall_xp": xp,
+            "level": level_from_total_xp(xp),
+        })
+    return response.Response(results)
 
 # -----------------------------------------------------------------------------
 # 8) Quizzes / Module Attempts

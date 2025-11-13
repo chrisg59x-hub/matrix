@@ -611,7 +611,7 @@ paths:
   /api/leaderboard/:
     get:
       operationId: leaderboard_list
-      description: Simple org leaderboard by total XP.
+      description: Simple org leaderboard by total XP (JSON).
       tags:
       - leaderboard
       security:
