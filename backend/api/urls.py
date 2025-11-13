@@ -28,6 +28,7 @@ from .views import (
     my_sop_views,
     my_progress,
     sop_view_heartbeat,
+    my_overdue_sops, 
     start_module_attempt,
     submit_started_attempt,
     # --- Optional extras (leave commented if not implemented) ---

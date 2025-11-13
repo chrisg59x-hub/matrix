@@ -149,11 +149,23 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
-    user_name = serializers.CharField(source="user.username", read_only=True)
 
     class Meta:
         model = RecertRequirement
-        fields = ("id", "user", "user_name", "skill", "skill_name", "due_at", "reason", "meta")
+        fields = [
+            "id",
+            "org",
+            "user",
+            "skill",
+            "skill_name",
+            "due_date",
+            "due_at",
+            "reason",
+            "meta",
+            "resolved",
+            "created_at",
+        ]
+        read_only_fields = ["created_at"]
 
 
 class LevelDefSerializer(serializers.ModelSerializer):

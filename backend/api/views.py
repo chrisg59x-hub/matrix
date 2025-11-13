@@ -10,7 +10,7 @@ from datetime import timedelta
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
-from django.db.models import Sum #Count, F
+from django.db.models import Sum, Q #Count, F
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
@@ -33,7 +33,7 @@ from learning.models import (
     UserBadge,
     XPEvent,
 )
-from rest_framework import decorators, permissions, response, status, viewsets, filters
+from rest_framework import decorators, permissions, response, status, viewsets, filters, generics
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -197,6 +197,58 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
     serializer_class = RoleAssignmentSerializer
     permission_classes = [IsManagerForWrites]
 
+class MyOverdueSOPsView(generics.ListAPIView):
+    serializer_class = RecertRequirementSerializer
+    permission_classes = [IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        today = timezone.localdate()
+        now = timezone.now()
+
+        base_qs = RecertRequirement.objects.filter(
+            user=user,
+            resolved=False,          # ignore resolved / satisfied items
+        )
+
+        # Overdue if:
+        # - due_date is before today, OR
+        # - due_at is set and is in the past
+        overdue_qs = base_qs.filter(
+            Q(due_date__lt=today)
+            | Q(due_at__isnull=False, due_at__lte=now)
+        )
+
+        return overdue_qs.select_related("skill", "sop")
+    
+class MeOverdueSopsView(generics.ListAPIView):
+    """
+    Return overdue recertification requirements for the current user.
+
+    Overdue if:
+      - resolved == False
+      AND
+      - (due_date < today) OR (due_at <= now, if due_at is set)
+    """
+    serializer_class = RecertRequirementSerializer
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get_queryset(self):
+        user = self.request.user
+        today = timezone.localdate()
+        now = timezone.now()
+
+        return (
+            RecertRequirement.objects
+            .filter(
+                user=user,
+                resolved=False,
+            )
+            .filter(
+                Q(due_date__lt=today) | Q(due_at__lte=now)
+            )
+            .order_by("due_date", "due_at")
+        )
 
 # -----------------------------------------------------------------------------
 # 6) SOP Media Heartbeat & Completion
@@ -574,41 +626,33 @@ def whoami(request):
         }
     )
 
-@extend_schema(responses=SOPSerializer(many=True))
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
+@extend_schema(
+    responses=RecertRequirementSerializer(many=True),
+    description="List recert requirements for the current user that are overdue (due_at < now)."
+)
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
 def my_overdue_sops(request):
     """
-    Return SOPs that are overdue for the current user, based on RecertRequirement.
-    A SOP is considered overdue if:
-      - There is a RecertRequirement for this user with due_at in the past
-      - There is an active Module for that Skill that has a linked SOP
+    Return recertification requirements that are past their due date for the
+    currently authenticated user.
     """
     now = timezone.now()
 
-    # All recert requirements for this user that are due in the past
-    overdue_recerts = RecertRequirement.objects.filter(
-        user=request.user,
-        due_at__lt=now,
-    ).values_list("skill_id", flat=True).distinct()
-
-    if not overdue_recerts:
-        return response.Response([], status=status.HTTP_200_OK)
-
-    # Modules for those skills that are active and have a SOP
-    modules = (
-        Module.objects
-        .filter(skill_id__in=overdue_recerts, active=True)
-        .exclude(sop__isnull=True)
-        .select_related("sop")
+    qs = (
+        RecertRequirement.objects
+        .select_related("user", "skill", "org")
+        .filter(
+            user=request.user,
+            org=getattr(request.user, "org", None),
+            due_at__lt=now,
+        )
+        .order_by("due_at")
     )
 
-    sop_ids = modules.values_list("sop_id", flat=True).distinct()
-    if not sop_ids:
-        return response.Response([], status=status.HTTP_200_OK)
+    data = RecertRequirementSerializer(qs, many=True).data
+    return response.Response(data)
 
-    sops = SOP.objects.filter(id__in=sop_ids)
-    return response.Response(SOPSerializer(sops, many=True).data, status=status.HTTP_200_OK)
 
 
 @extend_schema(

@@ -1,123 +1,149 @@
-<script setup lang="ts">
+<script setup>
+import { ref, computed, onMounted } from 'vue'
+
 const { get } = useApi()
 
-type Row = Record<string, any>
-
-const rows = ref<Row[]>([])
-const sopViewMap = ref<Record<string, any>>({})
+const rows = ref([])
 const loading = ref(true)
-const err = ref<string | null>(null)
+const err = ref(null)
 
 onMounted(load)
 
-async function load() {
+async function load () {
   loading.value = true
   err.value = null
   try {
-    // Overdue SOPs
-    const data: any = await get('/me/overdue-sops/')
+    const data = await get('/me/overdue-sops/')
+    // accept either plain array or paginated { results: [...] }
     rows.value = Array.isArray(data) ? data : (data.results || [])
-
-    // Views (for progress)
-    const views: any = await get('/me/sop-views/')
-    const list = Array.isArray(views) ? views : (views.results || [])
-    const map: Record<string, any> = {}
-    for (const v of list) {
-      if (v.sop) {
-        map[String(v.sop)] = v
-      }
-    }
-    sopViewMap.value = map
-  } catch (e: any) {
-    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load overdue SOPs')
+  } catch (e) {
+    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load')
   } finally {
     loading.value = false
   }
 }
 
-function getView(row: Row) {
-  return sopViewMap.value[String(row.id)] || null
+function formatDate (value) {
+  if (!value) return '—'
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return String(value)
+  return d.toLocaleDateString()
 }
+
+function daysOverdue (value) {
+  if (!value) return null
+  const due = new Date(value)
+  if (Number.isNaN(due.getTime())) return null
+  const today = new Date()
+  // strip time
+  today.setHours(0, 0, 0, 0)
+  due.setHours(0, 0, 0, 0)
+  const diffMs = today - due
+  const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
+  return diffDays > 0 ? diffDays : 0
+}
+
+// decorate rows with derived values
+const decorated = computed(() =>
+  rows.value.map(r => {
+    const d = daysOverdue(r.due_at)
+    return {
+      ...r,
+      _daysOverdue: d,
+    }
+  }).sort((a, b) => {
+    // sort: most overdue first, then nearest due date
+    const ad = a._daysOverdue ?? 0
+    const bd = b._daysOverdue ?? 0
+    if (ad !== bd) return bd - ad
+    const at = a.due_at ? new Date(a.due_at).getTime() : 0
+    const bt = b.due_at ? new Date(b.due_at).getTime() : 0
+    return at - bt
+  })
+)
 </script>
 
 <template>
   <div class="space-y-4">
-    <div>
-      <h1 class="text-2xl font-bold">My Overdue Training</h1>
-      <p class="mt-1 text-sm text-slate-600">
-        SOPs that are currently overdue for you, based on recertification rules.
-      </p>
-    </div>
-
-    <div v-if="loading" class="text-gray-500">Loading…</div>
-    <div v-else-if="err" class="text-red-600 break-all">{{ err }}</div>
-
-    <div v-else-if="rows.length === 0" class="text-sm text-emerald-700">
-      🎉 You have no overdue SOPs right now.
-    </div>
-
-    <ul v-else class="space-y-2">
-      <li
-        v-for="r in rows"
-        :key="r.id"
-        class="border rounded p-3 flex items-center gap-4"
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-2xl font-bold">
+        My Overdue Training
+      </h1>
+      <button
+        type="button"
+        class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+        @click="load"
       >
-        <div class="flex-1 min-w-0 space-y-1">
-          <div class="flex items-center gap-2">
+        Refresh
+      </button>
+    </div>
+
+    <p class="text-sm text-gray-600">
+      These are skills or SOP-related requirements that have passed their due date or require re-certification.
+    </p>
+
+    <div v-if="loading" class="text-gray-500">
+      Loading…
+    </div>
+
+    <div v-else-if="err" class="text-red-600 break-all">
+      {{ err }}
+    </div>
+
+    <div v-else>
+      <div v-if="decorated.length === 0" class="text-sm text-emerald-700">
+        ✅ You have no overdue training requirements. Nice work!
+      </div>
+
+      <div
+        v-else
+        class="space-y-2"
+      >
+        <div
+          v-for="item in decorated"
+          :key="item.id"
+          class="bg-white border rounded p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"
+        >
+          <div class="flex-1 min-w-0">
             <div class="font-medium truncate">
-              {{ r.title || r.name || r.code || r.id }}
+              {{ item.skill_name || 'Unspecified skill' }}
             </div>
-            <span
-              class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700"
+            <div class="text-xs text-gray-600 mt-0.5">
+              Reason: {{ item.reason || 'Not specified' }}
+            </div>
+            <div
+              v-if="item.meta"
+              class="text-xs text-gray-500 mt-0.5 break-all"
             >
-              Overdue
-            </span>
+              Meta: {{ typeof item.meta === 'string' ? item.meta : JSON.stringify(item.meta) }}
+            </div>
           </div>
 
-          <div class="text-xs text-gray-600 truncate">
-            {{ r.description || r.summary || '' }}
+          <div class="text-xs text-right min-w-[8rem] space-y-1">
+            <div>
+              <span class="font-semibold">Due date:</span>
+              <span> {{ formatDate(item.due_at) }}</span>
+            </div>
+            <div v-if="item._daysOverdue && item._daysOverdue > 0">
+              <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 px-2 py-0.5">
+                {{ item._daysOverdue }} day<span v-if="item._daysOverdue !== 1">s</span> overdue
+              </span>
+            </div>
           </div>
 
-          <!-- Progress for this SOP -->
-          <div class="mt-1 text-xs flex flex-wrap gap-2 items-center">
-            <span
-              v-if="getView(r)?.completed"
-              class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700"
+          <!-- Placeholder for future "Start training" action -->
+          <!--
+          <div class="min-w-[9rem] flex justify-end">
+            <NuxtLink
+              to="/modules"
+              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
             >
-              ✓ Completed (but still marked overdue)
-            </span>
-            <span
-              v-else-if="getView(r)"
-              class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 font-medium text-amber-700"
-            >
-              In progress ·
-              {{ Math.round(((getView(r).progress || 0) * 100)) }}%
-            </span>
-            <span
-              v-else
-              class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-slate-500"
-            >
-              Not started
-            </span>
+              View training
+            </NuxtLink>
           </div>
+          -->
         </div>
-
-        <div class="flex flex-col items-end gap-2">
-          <NuxtLink
-            :to="`/sops/${r.id}`"
-            class="inline-flex items-center rounded bg-emerald-600 px-3 py-1 text-xs font-medium text-white hover:bg-emerald-700"
-          >
-            View SOP
-          </NuxtLink>
-
-          <NuxtLink
-            to="/sops"
-            class="text-[11px] text-slate-500 hover:text-slate-700 underline"
-          >
-            Back to all SOPs
-          </NuxtLink>
-        </div>
-      </li>
-    </ul>
+      </div>
+    </div>
   </div>
 </template>
