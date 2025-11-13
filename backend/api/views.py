@@ -302,41 +302,7 @@ def leaderboard(request):
 
 
 
-@extend_schema(responses=LeaderboardEntrySerializer(many=True))
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def role_leaderboard(request, role_id):
-    """
-    Leaderboard for users assigned to a given JobRole (all skills).
-    """
-    # Import here to avoid circulars
-    from learning.models import RoleAssignment
 
-    user_ids = list(
-        RoleAssignment.objects
-        .filter(role_id=role_id)
-        .values_list("user_id", flat=True)
-    )
-
-    qs = (
-        _org_xp_queryset(request)
-        .filter(user_id__in=user_ids)
-        .values("user_id", "user__username")
-        .annotate(overall_xp=Sum("amount"))
-        .order_by("-overall_xp")
-    )
-
-    results = []
-    for rank, row in enumerate(qs, start=1):
-        xp = row["overall_xp"] or 0
-        results.append({
-            "rank": rank,
-            "user_id": row["user_id"],
-            "username": row["user__username"],
-            "overall_xp": xp,
-            "level": level_from_total_xp(xp),
-        })
-    return response.Response(results)
 
 # -----------------------------------------------------------------------------
 # 8) Quizzes / Module Attempts
@@ -492,32 +458,39 @@ def skill_leaderboard(request, skill_id):
 
 # --- Role Leaderboard ------------------------------------------------------
 
-@extend_schema(
-    description="Leaderboard by XP for users assigned to a specific JobRole in your org.",
-    parameters=[OpenApiParameter("role_id", str, OpenApiParameter.PATH)],
-    responses=LeaderboardEntrySerializer(many=True),
-)
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-def role_leaderboard(request, role_id: str):
-    org_id = _org_id(request)
-    # Users currently active in the role
-    user_ids = (RoleAssignment.objects
-                .filter(role_id=role_id, active=True)
-                .values_list("user_id", flat=True))
-    qs = (XPEvent.objects
-          .filter(org_id=org_id, user_id__in=user_ids)
-          .values("user_id", "user__username")
-          .annotate(overall_xp=Sum("amount"))
-          .order_by("-overall_xp"))
+@extend_schema(responses=LeaderboardEntrySerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def role_leaderboard(request, role_id):
+    """
+    Leaderboard for users assigned to a given JobRole (all skills).
+    """
+    # Import here to avoid circulars
+    from learning.models import RoleAssignment
+
+    user_ids = list(
+        RoleAssignment.objects
+        .filter(role_id=role_id)
+        .values_list("user_id", flat=True)
+    )
+
+    qs = (
+        _org_xp_queryset(request)
+        .filter(user_id__in=user_ids)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
     results = []
     for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
         results.append({
             "rank": rank,
             "user_id": row["user_id"],
             "username": row["user__username"],
-            "overall_xp": row["overall_xp"] or 0,
-            "level": level_from_total_xp(row["overall_xp"] or 0),
+            "overall_xp": xp,
+            "level": level_from_total_xp(xp),
         })
     return response.Response(results)
 
