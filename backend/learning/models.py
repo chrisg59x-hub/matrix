@@ -133,20 +133,28 @@ class SupervisorSignoff(models.Model):
 
 
 class RecertRequirement(models.Model):
-    REASON = [("expiry", "expiry"), ("sop_major_update", "sop_major_update")]
-    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
-    org = models.ForeignKey(Org, on_delete=models.CASCADE, related_name="recert_requirements")
-    user = models.ForeignKey(User, on_delete=models.CASCADE, related_name="recert_requirements")
-    skill = models.ForeignKey("Skill", on_delete=models.CASCADE, related_name="recert_requirements")
-    due_date = models.DateField()
-    due_at = models.DateTimeField(null=True, blank=True)
-    reason = models.CharField(max_length=30, choices=REASON, blank=True)
-    resolved = models.BooleanField(default=False)
+    org = models.ForeignKey("accounts.Org", on_delete=models.CASCADE, related_name="recert_requirements")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="recert_requirements")
+    sop = models.ForeignKey("sops.SOP", null=True, blank=True, on_delete=models.CASCADE, related_name="recert_requirements")
+    skill = models.ForeignKey("learning.Skill", null=True, blank=True, on_delete=models.CASCADE, related_name="recert_requirements")
 
+    # this already exists in your DB (we saw the NOT NULL error earlier)
+    due_date = models.DateField()
+
+    # already recently added in earlier work, keep if present:
     meta = models.JSONField(default=dict, blank=True)
 
+    # ✅ NEW: mark when it has been satisfied / re-certified
+    resolved_at = models.DateTimeField(null=True, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["due_date", "id"]
+
     def __str__(self):
-        return f"{self.user} recert for {self.skill} (due {self.due_at})"
+        base = self.skill.name if self.skill else (self.sop.title if self.sop else "Recert")
+        return f"{base} for {self.user} due {self.due_date}"
 
 # ---- Levels & Badges --------------------------------------------------------
 

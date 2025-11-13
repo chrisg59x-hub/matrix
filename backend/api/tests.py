@@ -7,111 +7,116 @@ from django.contrib.auth import get_user_model
 from rest_framework.test import APIClient
 from rest_framework import status
 
-from accounts.models import Org
+from accounts.models import Org, User
 from learning.models import Skill, RecertRequirement
 
 User = get_user_model()
 
 
 class OverdueSopsAPITests(TestCase):
-    def setUp(self):
-        self.org = Org.objects.create(name="Test Org")
+    """
+    Tests for /api/me/overdue-sops/ endpoint.
+    """
 
+    def setUp(self):
+        self.client = APIClient()
+
+        # Org + users
+        self.org = Org.objects.create(name="Test Org")
         self.user = User.objects.create_user(
             username="alice",
+            email="alice@example.com",
             password="password123",
+            org=self.org,
         )
         self.other_user = User.objects.create_user(
             username="bob",
+            email="bob@example.com",
             password="password123",
-        )
-
-        # minimal skill with required org
-        self.skill = Skill.objects.create(
             org=self.org,
-            name="Test Skill",
         )
 
-        self.client = APIClient()
-        self.url = "/api/me/overdue-sops/"
+        # Simple skill
+        self.skill = Skill.objects.create(org=self.org, name="Test Skill")
 
     def test_requires_auth(self):
-        resp = self.client.get(self.url)
-        self.assertIn(resp.status_code, (status.HTTP_401_UNAUTHORIZED, status.HTTP_403_FORBIDDEN))
-
-    def _auth(self, user=None):
-        if user is None:
-            user = self.user
-        self.client.force_authenticate(user=user)
+        """Endpoint requires authentication."""
+        resp = self.client.get("/api/me/overdue-sops/")
+        self.assertEqual(resp.status_code, 401)
 
     def test_returns_only_overdue_for_current_user(self):
-        """Only past-due, unresolved requirements for the logged-in user are returned."""
-
-        self._auth(self.user)
+        """
+        Only past-due, unresolved requirements for the logged-in user are returned.
+        """
         today = timezone.now().date()
+        past_date = today - timezone.timedelta(days=7)
+        future_date = today + timezone.timedelta(days=7)
 
-        # overdue requirement for current user
-        overdue = RecertRequirement.objects.create(
-            org=self.org,
-            user=self.user,
-            skill=self.skill,
-            due_date=today - timedelta(days=2),
-            reason="Past due",
-        )
-
-        # future requirement for current user (should NOT be returned)
+        # 1) overdue for current user -> SHOULD appear
         RecertRequirement.objects.create(
             org=self.org,
             user=self.user,
             skill=self.skill,
-            due_date=today + timedelta(days=2),
-            reason="Future requirement",
+            due_date=past_date,
+            reason="Past due",
         )
 
-        # overdue requirement for another user (should NOT be returned)
+        # 2) future due for current user -> should NOT appear
+        RecertRequirement.objects.create(
+            org=self.org,
+            user=self.user,
+            skill=self.skill,
+            due_date=future_date,
+            reason="Not yet due",
+        )
+
+        # 3) overdue for different user -> should NOT appear
         RecertRequirement.objects.create(
             org=self.org,
             user=self.other_user,
             skill=self.skill,
-            due_date=today - timedelta(days=5),
-            reason="Other user's overdue",
+            due_date=past_date,
+            reason="Other user",
         )
 
-        resp = self.client.get(self.url)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.get("/api/me/overdue-sops/")
+        self.assertEqual(resp.status_code, 200)
 
         items = list(resp.data)
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["id"], str(overdue.id))
+        self.assertEqual(items[0]["reason"], "Past due")
 
     def test_ignores_resolved_requirements(self):
-        """Overdue requirements that are already resolved must not be included."""
-
-        self._auth(self.user)
+        """
+        Overdue requirements that are already resolved must not be included.
+        """
         today = timezone.now().date()
+        past_date = today - timezone.timedelta(days=3)
 
-        # unresolved overdue requirement (should be returned)
-        active = RecertRequirement.objects.create(
-            org=self.org,
-            user=self.user,
-            skill=self.skill,
-            due_date=today - timedelta(days=3),
-            reason="Still overdue",
-        )
-
-        # same user, overdue but resolved (should NOT be returned)
+        # 1) overdue but resolved -> SHOULD be ignored
         RecertRequirement.objects.create(
             org=self.org,
             user=self.user,
             skill=self.skill,
-            due_date=today - timedelta(days=7),
+            due_date=past_date,
             reason="Already resolved",
             resolved_at=timezone.now(),
         )
 
-        resp = self.client.get(self.url)
-        self.assertEqual(resp.status_code, status.HTTP_200_OK)
+        # 2) overdue and unresolved -> SHOULD be returned
+        RecertRequirement.objects.create(
+            org=self.org,
+            user=self.user,
+            skill=self.skill,
+            due_date=past_date,
+            reason="Still overdue",
+        )
+
+        self.client.force_authenticate(user=self.user)
+        resp = self.client.get("/api/me/overdue-sops/")
+        self.assertEqual(resp.status_code, 200)
 
         items = list(resp.data)
         self.assertEqual(len(items), 1)
-        self.assertEqual(items[0]["id"], str(active.id))
+        self.assertEqual(items[0]["reason"], "Still overdue")

@@ -148,10 +148,7 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
-    """Lightweight representation for overdue / recert requirements."""
-
     skill_name = serializers.SerializerMethodField()
-    sop_title = serializers.SerializerMethodField()
 
     class Meta:
         model = RecertRequirement
@@ -160,19 +157,14 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
             "due_date",
             "reason",
             "meta",
+            "resolved_at",
+            "skill",
             "skill_name",
-            "sop_title",
+            "sop",
         ]
 
     def get_skill_name(self, obj):
-        if getattr(obj, "skill", None):
-            return obj.skill.name
-        return None
-
-    def get_sop_title(self, obj):
-        if getattr(obj, "sop", None):
-            return obj.sop.title
-        return None
+        return obj.skill.name if obj.skill else None
 
 
 class LevelDefSerializer(serializers.ModelSerializer):
