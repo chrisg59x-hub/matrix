@@ -16,6 +16,9 @@ const sopViewMap = ref<Record<string, any>>({})
 // overdue flags by SOP id
 const overdueMap = ref<Record<string, boolean>>({})
 
+// UI state: show only overdue?
+const showOverdueOnly = ref(false)
+
 onMounted(load)
 
 async function load() {
@@ -147,18 +150,45 @@ function getView(r: Row) {
 function isOverdue(r: Row) {
   return !!overdueMap.value[String(r.id)]
 }
+
+// rows actually shown in the list, based on toggle
+const displayRows = computed(() => {
+  if (!showOverdueOnly.value) return rows.value
+  return rows.value.filter(r => isOverdue(r))
+})
 </script>
 
 <template>
   <div class="space-y-4">
-    <h1 class="text-2xl font-bold">SOPs</h1>
+    <div class="flex items-center justify-between gap-3">
+      <h1 class="text-2xl font-bold">SOPs</h1>
+
+      <!-- Overdue toggle -->
+      <label class="inline-flex items-center gap-2 text-sm text-slate-700">
+        <input
+          v-model="showOverdueOnly"
+          type="checkbox"
+          class="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+        />
+        <span>Show overdue only</span>
+      </label>
+    </div>
 
     <div v-if="loading" class="text-gray-500">Loading…</div>
     <div v-else-if="err" class="text-red-600 break-all">{{ err }}</div>
 
+    <div v-else-if="displayRows.length === 0" class="text-sm text-slate-500">
+      <span v-if="showOverdueOnly">
+        No overdue SOPs 🎉
+      </span>
+      <span v-else>
+        No SOPs found.
+      </span>
+    </div>
+
     <ul v-else class="space-y-2">
       <li
-        v-for="r in rows"
+        v-for="r in displayRows"
         :key="r.id"
         class="border rounded p-3 flex items-center gap-4"
       >
@@ -254,3 +284,4 @@ function isOverdue(r: Row) {
     </div>
   </div>
 </template>
+
