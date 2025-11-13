@@ -71,8 +71,8 @@ jobs:
           DJANGO_SETTINGS_MODULE: matrix.settings
         run: |
           mkdir -p context
-          python manage.py spectacular --format openapi-json --output context/openapi.json
-          python manage.py spectacular --format openapi-yaml --output context/openapi.yaml
+          python manage.py spectacular --format openapi-json --file context/openapi.json
+          python manage.py spectacular --format openapi-yaml --file context/openapi.yaml
 
       - name: 📤 Upload backend artifacts
         if: always()
