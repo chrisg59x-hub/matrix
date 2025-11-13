@@ -200,24 +200,35 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class MyOverdueSOPsView(generics.ListAPIView):
     """
-    Returns overdue, unresolved recertification requirements for the current user.
+    Return overdue recertification requirements for the logged-in user.
+
+    A requirement is "overdue" if:
+      - it belongs to the same org & user
+      - it is not resolved
+      - and either:
+          * due_at is set and is in the past, OR
+          * due_at is null and due_date is set and is in the past
     """
     serializer_class = RecertRequirementSerializer
     permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        today = timezone.now().date()
+        org = getattr(user, "org", None)
+        if not org:
+            return RecertRequirement.objects.none()
+
+        now = timezone.now()
+        today = now.date()
 
         qs = RecertRequirement.objects.filter(
+            org=org,
             user=user,
-            due_date__lt=today,
-            resolved_at__isnull=True,
+            resolved=False,
+        ).filter(
+            models.Q(due_at__lt=now) |
+            models.Q(due_at__isnull=True, due_date__lt=today)
         )
-
-        # If your User has an org field and you want to scope by it:
-        if hasattr(user, "org_id") and user.org_id:
-            qs = qs.filter(org_id=user.org_id)
 
         return qs.select_related("skill", "sop")
        

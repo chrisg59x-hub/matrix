@@ -148,19 +148,20 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
-    skill_name = serializers.SerializerMethodField()
+    skill_name = serializers.CharField(source="skill.name", read_only=True)
 
     class Meta:
         model = RecertRequirement
         fields = [
             "id",
-            "due_date",
-            "reason",
-            "meta",
-            "resolved_at",
             "skill",
             "skill_name",
             "sop",
+            "due_at",
+            "due_date",
+            "reason",
+            "resolved",
+            "meta",
         ]
 
     def get_skill_name(self, obj):

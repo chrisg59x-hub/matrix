@@ -133,28 +133,40 @@ class SupervisorSignoff(models.Model):
 
 
 class RecertRequirement(models.Model):
-    org = models.ForeignKey("accounts.Org", on_delete=models.CASCADE, related_name="recert_requirements")
-    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="recert_requirements")
-    sop = models.ForeignKey("sops.SOP", null=True, blank=True, on_delete=models.CASCADE, related_name="recert_requirements")
-    skill = models.ForeignKey("learning.Skill", null=True, blank=True, on_delete=models.CASCADE, related_name="recert_requirements")
+    """
+    A requirement for a user to (re-)certify against a skill/SOP by a certain time.
+    Used to drive 'My Overdue Training' etc.
+    """
+    org = models.ForeignKey("accounts.Org", on_delete=models.CASCADE)
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    skill = models.ForeignKey("learning.Skill", on_delete=models.CASCADE, null=True, blank=True)
+    sop = models.ForeignKey("sops.SOP", on_delete=models.CASCADE, null=True, blank=True)
 
-    # this already exists in your DB (we saw the NOT NULL error earlier)
-    due_date = models.DateField()
+    # date-based deadline (can be nullable if you prefer to use due_at)
+    due_date = models.DateField(null=True, blank=True)
 
-    # already recently added in earlier work, keep if present:
+    # optional precise timestamp used by the API/tests/UI
+    due_at = models.DateTimeField(null=True, blank=True)
+
+    # short explanation used by the tests/UI
+    reason = models.CharField(
+        max_length=40,
+        blank=True,
+        help_text="Short explanation like 'expiry' or 'SOP major update'",
+    )
+
+    # whether the requirement has been satisfied / waived
+    resolved = models.BooleanField(default=False)
+
+    # arbitrary context
     meta = models.JSONField(default=dict, blank=True)
 
-    # ✅ NEW: mark when it has been satisfied / re-certified
-    resolved_at = models.DateTimeField(null=True, blank=True)
-
-    created_at = models.DateTimeField(auto_now_add=True)
-
     class Meta:
-        ordering = ["due_date", "id"]
+        ordering = ["due_at", "due_date", "id"]
 
-    def __str__(self):
-        base = self.skill.name if self.skill else (self.sop.title if self.sop else "Recert")
-        return f"{base} for {self.user} due {self.due_date}"
+    def __str__(self) -> str:
+        base = self.skill.name if self.skill_id else "Recert requirement"
+        return f"{base} -> {self.user} ({self.due_date or self.due_at})"
 
 # ---- Levels & Badges --------------------------------------------------------
 

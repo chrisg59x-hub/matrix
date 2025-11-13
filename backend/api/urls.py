@@ -36,7 +36,7 @@ from .views import (
     skill_leaderboard, role_leaderboard, org_leaderboard_by_group,
     whoami,
 )
-
+app_name = "api"
 router = DefaultRouter()
 
 # --- Core CRUD/API routes (ViewSets) ---
