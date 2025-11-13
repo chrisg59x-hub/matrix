@@ -295,123 +295,11 @@ def leaderboard(request):
         })
     return response.Response(results)
 
-@extend_schema(
-    responses={200: {"type": "string", "format": "binary"}},
-    description="Download organisation leaderboard as CSV (rank, user, XP, level).",
-)
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def leaderboard_csv(request):
-    """
-    CSV export of org leaderboard by total XP.
-    """
-    qs = (
-        _org_xp_queryset(request)
-        .values("user_id", "user__username")
-        .annotate(overall_xp=Sum("amount"))
-        .order_by("-overall_xp")
-    )
 
-    resp = HttpResponse(content_type="text/csv")
-    resp["Content-Disposition"] = 'attachment; filename="leaderboard.csv"'
 
-    writer = csv.writer(resp)
-    writer.writerow(["rank", "user_id", "username", "overall_xp", "level"])
 
-    for rank, row in enumerate(qs, start=1):
-        xp = row["overall_xp"] or 0
-        writer.writerow([
-            rank,
-            row["user_id"],
-            row["user__username"],
-            xp,
-            level_from_total_xp(xp),
-        ])
 
-    return resp
 
-@extend_schema(
-    responses={200: {"type": "string", "format": "binary"}},
-    description=(
-        "Download raw XP events as CSV for the current org. "
-        "Optional query params: ?since_days=30 to limit to recent events."
-    ),
-)
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def xp_events_csv(request):
-    """
-    CSV dump of XPEvent rows for the current org.
-    """
-    qs = _org_xp_queryset(request).select_related("user", "skill")
-
-    # Optional simple time filter: ?since_days=30
-    since_days = request.GET.get("since_days")
-    if since_days:
-        try:
-            days = int(since_days)
-            cutoff = timezone.now() - timedelta(days=days)
-            qs = qs.filter(created_at__gte=cutoff)
-        except ValueError:
-            pass  # ignore bad input, just return full queryset
-
-    resp = HttpResponse(content_type="text/csv")
-    resp["Content-Disposition"] = 'attachment; filename="xp_events.csv"'
-
-    writer = csv.writer(resp)
-    writer.writerow([
-        "id",
-        "created_at",
-        "user_id",
-        "username",
-        "skill_id",
-        "skill_name",
-        "amount",
-        "source",
-        "reason",
-    ])
-
-    for ev in qs.order_by("-created_at"):
-        writer.writerow([
-            ev.id,
-            ev.created_at.isoformat(),
-            ev.user_id,
-            getattr(ev.user, "username", ""),
-            ev.skill_id,
-            getattr(ev.skill, "name", "") if ev.skill_id else "",
-            ev.amount,
-            getattr(ev, "source", ""),
-            getattr(ev, "reason", ""),
-        ])
-
-    return resp
-
-@extend_schema(responses=LeaderboardEntrySerializer(many=True))
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def skill_leaderboard(request, skill_id):
-    """
-    Leaderboard for a single skill within the current org.
-    """
-    qs = (
-        _org_xp_queryset(request)
-        .filter(skill_id=skill_id)
-        .values("user_id", "user__username")
-        .annotate(overall_xp=Sum("amount"))
-        .order_by("-overall_xp")
-    )
-
-    results = []
-    for rank, row in enumerate(qs, start=1):
-        xp = row["overall_xp"] or 0
-        results.append({
-            "rank": rank,
-            "user_id": row["user_id"],
-            "username": row["user__username"],
-            "overall_xp": xp,
-            "level": level_from_total_xp(xp),
-        })
-    return response.Response(results)
 
 
 @extend_schema(responses=LeaderboardEntrySerializer(many=True))
@@ -481,81 +369,124 @@ def _csv_response(filename: str, rows, header: list[str]):
 # --- CSV: ORG Leaderboard --------------------------------------------------
 
 @extend_schema(
-    description="Download the current org leaderboard as CSV (rank, user, xp, level).",
-    responses={(200, "text/csv"): None},
+    responses={200: {"type": "string", "format": "binary"}},
+    description="Download organisation leaderboard as CSV (rank, user, XP, level).",
 )
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
 def leaderboard_csv(request):
-    org_id = _org_id(request)
-    qs = (XPEvent.objects
-          .filter(org_id=org_id)
-          .values("user_id", "user__username")
-          .annotate(overall_xp=Sum("amount"))
-          .order_by("-overall_xp"))
-    rows = []
-    for i, r in enumerate(qs, start=1):
-        level = level_from_total_xp(r["overall_xp"] or 0)
-        rows.append([i, r["user_id"], r["user__username"], r["overall_xp"] or 0, level])
-    return _csv_response("leaderboard.csv", rows,
-                         header=["rank", "user_id", "username", "overall_xp", "level"])
+    """
+    CSV export of org leaderboard by total XP.
+    """
+    qs = (
+        _org_xp_queryset(request)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="leaderboard.csv"'
+
+    writer = csv.writer(resp)
+    writer.writerow(["rank", "user_id", "username", "overall_xp", "level"])
+
+    for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
+        writer.writerow([
+            rank,
+            row["user_id"],
+            row["user__username"],
+            xp,
+            level_from_total_xp(xp),
+        ])
+
+    return resp
 
 # --- CSV: Raw XP export (manager/admin only) -------------------------------
 
 @extend_schema(
-    description="Export raw XP events for your org (CSV). Managers/admins only.",
-    responses={(200, "text/csv"): None},
+    responses={200: {"type": "string", "format": "binary"}},
+    description=(
+        "Download raw XP events as CSV for the current org. "
+        "Optional query params: ?since_days=30 to limit to recent events."
+    ),
 )
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
 def xp_events_csv(request):
-    _require_manager(request)
-    org_id = _org_id(request)
-    qs = (XPEvent.objects
-          .select_related("user", "skill")
-          .filter(org_id=org_id)
-          .order_by("-created_at"))
-    rows = []
-    for e in qs.iterator():
-        rows.append([
-            str(e.id),
-            e.created_at.isoformat() if e.created_at else "",
-            str(getattr(e.org, "id", "")),
-            str(getattr(e.user, "id", "")),
-            getattr(e.user, "username", ""),
-            str(getattr(e.skill, "id", "")),
-            getattr(e.skill, "name", ""),
-            e.source or "",
-            e.amount or 0,
-            (e.meta if isinstance(e.meta, (str, int, float)) else ("" if e.meta is None else str(e.meta))),
+    """
+    CSV dump of XPEvent rows for the current org.
+    """
+    qs = _org_xp_queryset(request).select_related("user", "skill")
+
+    # Optional simple time filter: ?since_days=30
+    since_days = request.GET.get("since_days")
+    if since_days:
+        try:
+            days = int(since_days)
+            cutoff = timezone.now() - timedelta(days=days)
+            qs = qs.filter(created_at__gte=cutoff)
+        except ValueError:
+            pass  # ignore bad input, just return full queryset
+
+    resp = HttpResponse(content_type="text/csv")
+    resp["Content-Disposition"] = 'attachment; filename="xp_events.csv"'
+
+    writer = csv.writer(resp)
+    writer.writerow([
+        "id",
+        "created_at",
+        "user_id",
+        "username",
+        "skill_id",
+        "skill_name",
+        "amount",
+        "source",
+        "reason",
+    ])
+
+    for ev in qs.order_by("-created_at"):
+        writer.writerow([
+            ev.id,
+            ev.created_at.isoformat(),
+            ev.user_id,
+            getattr(ev.user, "username", ""),
+            ev.skill_id,
+            getattr(ev.skill, "name", "") if ev.skill_id else "",
+            ev.amount,
+            getattr(ev, "source", ""),
+            getattr(ev, "reason", ""),
         ])
-    return _csv_response("xp_events.csv", rows,
-                         header=["id","created_at","org_id","user_id","username","skill_id","skill_name","source","amount","meta"])
+
+    return resp
 
 # --- Skill Leaderboard -----------------------------------------------------
 
-@extend_schema(
-    description="Leaderboard by XP for a specific skill in the current org.",
-    parameters=[OpenApiParameter("skill_id", str, OpenApiParameter.PATH)],
-    responses=LeaderboardEntrySerializer(many=True),
-)
-@api_view(["GET"])
-@permission_classes([permissions.IsAuthenticated])
-def skill_leaderboard(request, skill_id: str):
-    org_id = _org_id(request)
-    qs = (XPEvent.objects
-          .filter(org_id=org_id, skill_id=skill_id)
-          .values("user_id", "user__username")
-          .annotate(overall_xp=Sum("amount"))
-          .order_by("-overall_xp"))
+@extend_schema(responses=LeaderboardEntrySerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def skill_leaderboard(request, skill_id):
+    """
+    Leaderboard for a single skill within the current org.
+    """
+    qs = (
+        _org_xp_queryset(request)
+        .filter(skill_id=skill_id)
+        .values("user_id", "user__username")
+        .annotate(overall_xp=Sum("amount"))
+        .order_by("-overall_xp")
+    )
+
     results = []
     for rank, row in enumerate(qs, start=1):
+        xp = row["overall_xp"] or 0
         results.append({
             "rank": rank,
             "user_id": row["user_id"],
             "username": row["user__username"],
-            "overall_xp": row["overall_xp"] or 0,
-            "level": level_from_total_xp(row["overall_xp"] or 0),
+            "overall_xp": xp,
+            "level": level_from_total_xp(xp),
         })
     return response.Response(results)
 
