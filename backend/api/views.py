@@ -738,6 +738,15 @@ def start_module_attempt(request, module_id: str):
     }
     return response.Response(payload, status=status.HTTP_200_OK)
 
+@extend_schema(responses=SOPViewSerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def my_sop_views(request):
+    """
+    Return SOPView records for the current user (per-SOP progress).
+    """
+    qs = SOPView.objects.filter(user=request.user).select_related("sop")
+    return response.Response(SOPViewSerializer(qs, many=True).data)
 
 @extend_schema(
     request=SubmitAttemptRequestSerializer,
