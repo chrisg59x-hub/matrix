@@ -13,6 +13,8 @@ const previewSrc = ref('')
 
 // per-SOP view data for current user
 const sopViewMap = ref<Record<string, any>>({})
+// overdue flags by SOP id
+const overdueMap = ref<Record<string, boolean>>({})
 
 onMounted(load)
 
@@ -23,8 +25,11 @@ async function load() {
     const data: any = await get('/sops/')
     rows.value = Array.isArray(data) ? data : (data.results || [])
 
-    // after loading SOPs, load the user's views
-    await loadViews()
+    // after loading SOPs, load the user's views and overdue info
+    await Promise.all([
+      loadViews(),
+      loadOverdue(),
+    ])
   } catch (e: any) {
     err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load')
   } finally {
@@ -44,7 +49,23 @@ async function loadViews() {
     }
     sopViewMap.value = map
   } catch {
-    // best-effort; just ignore if it fails
+    // best-effort; ignore failures
+  }
+}
+
+async function loadOverdue() {
+  try {
+    const data: any = await get('/me/overdue-sops/')
+    const list = Array.isArray(data) ? data : (data.results || [])
+    const map: Record<string, boolean> = {}
+    for (const s of list) {
+      if (s.id) {
+        map[String(s.id)] = true
+      }
+    }
+    overdueMap.value = map
+  } catch {
+    // best-effort; ignore failures
   }
 }
 
@@ -121,6 +142,11 @@ function absoluteMediaUrl(pathOrUrl: string) {
 function getView(r: Row) {
   return sopViewMap.value[String(r.id)] || null
 }
+
+// check if a SOP is overdue
+function isOverdue(r: Row) {
+  return !!overdueMap.value[String(r.id)]
+}
 </script>
 
 <template>
@@ -137,18 +163,29 @@ function getView(r: Row) {
         class="border rounded p-3 flex items-center gap-4"
       >
         <div class="flex-1 min-w-0 space-y-1">
-          <div class="font-medium truncate">
-            {{ r.title || r.name || r.code || r.id }}
+          <div class="flex items-center gap-2">
+            <div class="font-medium truncate">
+              {{ r.title || r.name || r.code || r.id }}
+            </div>
+            <!-- 🔴 Overdue chip -->
+            <span
+              v-if="isOverdue(r)"
+              class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-semibold text-red-700"
+            >
+              Overdue
+            </span>
           </div>
+
           <div class="text-xs text-gray-600 truncate">
             {{ r.description || r.summary || '' }}
           </div>
+
           <div class="text-xs text-gray-500">
             {{ kind(r) }}
           </div>
 
-          <!-- 👇 Status badge based on SOPView -->
-          <div class="mt-1 text-xs">
+          <!-- Status badge based on SOPView -->
+          <div class="mt-1 text-xs flex flex-wrap gap-2 items-center">
             <span
               v-if="getView(r)?.completed"
               class="inline-flex items-center rounded-full bg-emerald-100 px-2 py-0.5 font-medium text-emerald-700"
@@ -180,7 +217,7 @@ function getView(r: Row) {
             Open
           </button>
 
-          <!-- New: navigate to full SOP viewer page -->
+          <!-- Navigate to full SOP viewer page -->
           <NuxtLink
             :to="`/sops/${r.id}`"
             class="text-xs font-medium text-emerald-700 hover:text-emerald-900 underline"

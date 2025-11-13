@@ -574,6 +574,42 @@ def whoami(request):
         }
     )
 
+@extend_schema(responses=SOPSerializer(many=True))
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def my_overdue_sops(request):
+    """
+    Return SOPs that are overdue for the current user, based on RecertRequirement.
+    A SOP is considered overdue if:
+      - There is a RecertRequirement for this user with due_at in the past
+      - There is an active Module for that Skill that has a linked SOP
+    """
+    now = timezone.now()
+
+    # All recert requirements for this user that are due in the past
+    overdue_recerts = RecertRequirement.objects.filter(
+        user=request.user,
+        due_at__lt=now,
+    ).values_list("skill_id", flat=True).distinct()
+
+    if not overdue_recerts:
+        return response.Response([], status=status.HTTP_200_OK)
+
+    # Modules for those skills that are active and have a SOP
+    modules = (
+        Module.objects
+        .filter(skill_id__in=overdue_recerts, active=True)
+        .exclude(sop__isnull=True)
+        .select_related("sop")
+    )
+
+    sop_ids = modules.values_list("sop_id", flat=True).distinct()
+    if not sop_ids:
+        return response.Response([], status=status.HTTP_200_OK)
+
+    sops = SOP.objects.filter(id__in=sop_ids)
+    return response.Response(SOPSerializer(sops, many=True).data, status=status.HTTP_200_OK)
+
 
 @extend_schema(
     responses=StartAttemptSerializer,
