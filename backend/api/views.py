@@ -200,26 +200,27 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class MyOverdueSOPsView(generics.ListAPIView):
     """
-    List overdue / outstanding recertification requirements for the current user.
-    Overdue = due_date < today AND resolved_at is null.
+    Return overdue / recertification requirements for the current user.
+    Overdue = due_date < today and not resolved.
     """
+
+    permission_classes = [permissions.IsAuthenticated]
     serializer_class = RecertRequirementSerializer
-    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
         today = timezone.now().date()
 
-        return (
-            RecertRequirement.objects
-            .filter(
-                user=user,
-                due_date__lt=today,      # <--- IMPORTANT: use due_date here
-                resolved_at__isnull=True
-            )
-            .select_related("skill", "sop")
+        # Core logic: overdue requirements for this user
+        qs = RecertRequirement.objects.filter(
+            user=user,
+            due_date__lt=today,
+            resolved_at__isnull=True,
         )
-    
+
+        # bring in related information for skill / sop names
+        return qs.select_related("skill", "sop")
+       
 class MeOverdueSopsView(generics.ListAPIView):
     """
     Return overdue recertification requirements for the current user.

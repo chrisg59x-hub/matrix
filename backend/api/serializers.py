@@ -148,24 +148,31 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
-    skill_name = serializers.CharField(source="skill.name", read_only=True)
+    """Lightweight representation for overdue / recert requirements."""
+
+    skill_name = serializers.SerializerMethodField()
+    sop_title = serializers.SerializerMethodField()
 
     class Meta:
         model = RecertRequirement
         fields = [
             "id",
-            "org",
-            "user",
-            "skill",
-            "skill_name",
             "due_date",
-            "due_at",
             "reason",
             "meta",
-            "resolved",
-            "created_at",
+            "skill_name",
+            "sop_title",
         ]
-        read_only_fields = ["created_at"]
+
+    def get_skill_name(self, obj):
+        if getattr(obj, "skill", None):
+            return obj.skill.name
+        return None
+
+    def get_sop_title(self, obj):
+        if getattr(obj, "sop", None):
+            return obj.sop.title
+        return None
 
 
 class LevelDefSerializer(serializers.ModelSerializer):
