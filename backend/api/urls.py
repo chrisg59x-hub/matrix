@@ -66,7 +66,11 @@ urlpatterns = [
     path("me/progress/", my_progress),  # current user's XP/level/skills
     path("me/whoami/", whoami),  # username + role (used by Swagger banner)
     path("me/sop-views/", my_sop_views),
-    path("me/overdue-sops/", MyOverdueSOPsView.as_view(), name="my-overdue-sops"),
+    path(
+        "me/overdue-sops/",
+        MyOverdueSOPsView.as_view(),
+        name="me-overdue-sops",
+    ),
     path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),  # media viewed heartbeat/complete
     # Start → Submit quiz flow (randomised/shuffled/negative marking)
     path("modules/<uuid:module_id>/start/", start_module_attempt),  # returns attempt_id + served questions

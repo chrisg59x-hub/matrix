@@ -10,7 +10,7 @@ from datetime import timedelta
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
-from django.db.models import Sum, Q #Count, F
+from django.db.models import Sum # Q Count, F
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
@@ -200,37 +200,25 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class MyOverdueSOPsView(generics.ListAPIView):
     """
-    Return overdue recertification requirements for the logged-in user.
-
-    A requirement is "overdue" if:
-      - it belongs to the same org & user
-      - it is not resolved
-      - and either:
-          * due_at is set and is in the past, OR
-          * due_at is null and due_date is set and is in the past
+    Return overdue, unresolved recert requirements for the logged-in user.
     """
     serializer_class = RecertRequirementSerializer
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        org = getattr(user, "org", None)
-        if not org:
-            return RecertRequirement.objects.none()
+        # If due_date is a DateField, compare with today's date
+        today = timezone.now().date()
 
-        now = timezone.now()
-        today = now.date()
-
-        qs = RecertRequirement.objects.filter(
-            org=org,
-            user=user,
-            resolved=False,
-        ).filter(
-            models.Q(due_at__lt=now) |
-            models.Q(due_at__isnull=True, due_date__lt=today)
+        return (
+            RecertRequirement.objects
+            .filter(
+                user=user,
+                resolved_at__isnull=True,   # unresolved only
+                due_date__lt=today,         # strictly past due
+            )
+            .select_related("skill", "sop")
         )
-
-        return qs.select_related("skill", "sop")
        
 class MeOverdueSopsView(generics.ListAPIView):
     """
