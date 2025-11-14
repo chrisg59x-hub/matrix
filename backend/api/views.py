@@ -11,7 +11,7 @@ from datetime import timedelta
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
 from django.db import models
-from django.db.models import Sum # Q Count, F
+from django.db.models import Sum, Q #Count, F
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
@@ -201,36 +201,33 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class MyOverdueSOPsView(generics.ListAPIView):
     """
-    Return overdue SOP / skill recertification requirements
+    Returns only overdue, unresolved recertification requirements
     for the currently authenticated user.
     """
+    permission_classes = [IsAuthenticated]
     serializer_class = RecertRequirementSerializer
-    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-
-        # Date-only “today” for due_date comparisons
         today = timezone.localdate()
-        # Datetime "now" for due_at comparisons
         now = timezone.now()
 
-        # 1) Must belong to the current user
-        # 2) Must be unresolved (resolved == False)
-        # 3) Must be past due:
-        #       - due_date < today  OR  due_at < now
-        return (
-            RecertRequirement.objects
-            .filter(
-                user=user,
-                resolved=False,
-            )
-            .filter(
-                models.Q(due_date__lt=today) |
-                models.Q(due_at__lt=now)
-            )
-            .select_related("skill", "sop")
+        qs = RecertRequirement.objects.filter(
+            user=user,
+            resolved=False,  # unresolved only
         )
+
+        # If your User model has an org FK, keep everything in the same org
+        if hasattr(user, "org_id") and user.org_id:
+            qs = qs.filter(org=user.org)
+
+        # Past-due by either date or datetime
+        qs = qs.filter(
+            Q(due_date__lt=today) | Q(due_at__lt=now)
+        )
+
+        # Optimise joins for serializer
+        return qs.select_related("skill", "sop")
        
 class MeOverdueSopsView(generics.ListAPIView):
     """

@@ -163,7 +163,6 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
             "sop_title",
             "due_at",
             "meta",
-            "resolved_at",
         ]
         read_only_fields = ("user",)
 
