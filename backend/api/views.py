@@ -10,7 +10,8 @@ from datetime import timedelta
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
-from django.db.models import Sum, models # Q Count, F
+from django.db import models
+from django.db.models import Sum # Q Count, F
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
