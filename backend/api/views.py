@@ -207,15 +207,14 @@ class MyOverdueSOPsView(generics.ListAPIView):
 
     def get_queryset(self):
         user = self.request.user
-        # If due_date is a DateField, compare with today's date
         today = timezone.now().date()
 
         return (
             RecertRequirement.objects
             .filter(
                 user=user,
-                resolved_at__isnull=True,   # unresolved only
-                due_date__lt=today,         # strictly past due
+                resolved=False,       # ✅ unresolved only (boolean field)
+                due_date__lt=today,   # ✅ strictly past due
             )
             .select_related("skill", "sop")
         )
