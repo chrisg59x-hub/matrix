@@ -10,7 +10,7 @@ from datetime import timedelta
 # 2) App model imports Question, Choice
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
-from django.db.models import Sum # Q Count, F
+from django.db.models import Sum, models # Q Count, F
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
@@ -200,21 +200,33 @@ class RoleAssignmentViewSet(viewsets.ModelViewSet):
 
 class MyOverdueSOPsView(generics.ListAPIView):
     """
-    Return overdue, unresolved recert requirements for the logged-in user.
+    Return overdue SOP / skill recertification requirements
+    for the currently authenticated user.
     """
     serializer_class = RecertRequirementSerializer
-    permission_classes = [IsAuthenticated]
+    permission_classes = [permissions.IsAuthenticated]
 
     def get_queryset(self):
         user = self.request.user
-        today = timezone.now().date()
 
+        # Date-only “today” for due_date comparisons
+        today = timezone.localdate()
+        # Datetime "now" for due_at comparisons
+        now = timezone.now()
+
+        # 1) Must belong to the current user
+        # 2) Must be unresolved (resolved == False)
+        # 3) Must be past due:
+        #       - due_date < today  OR  due_at < now
         return (
             RecertRequirement.objects
             .filter(
                 user=user,
-                resolved=False,       # ✅ unresolved only (boolean field)
-                due_date__lt=today,   # ✅ strictly past due
+                resolved=False,
+            )
+            .filter(
+                models.Q(due_date__lt=today) |
+                models.Q(due_at__lt=now)
             )
             .select_related("skill", "sop")
         )
