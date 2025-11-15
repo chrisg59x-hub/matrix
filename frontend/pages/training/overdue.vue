@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import OverdueActions from '~/components/OverdueActions.vue'
+
 const { get } = useApi()
-const router = useRouter()
 
 type Item = {
   id: number
@@ -12,6 +13,7 @@ type Item = {
   due_date?: string | null
   reason?: string | null
   meta?: any
+  _daysOverdue?: number | null
 }
 
 const rows = ref<Item[]>([])
@@ -54,7 +56,7 @@ function daysOverdue (value?: string | null) {
 }
 
 // decorate rows with derived values + sort most overdue first
-const decorated = computed(() =>
+const decorated = computed<Item[]>(() =>
   rows.value
     .map(r => {
       const d = daysOverdue(r.due_at || r.due_date || null)
@@ -72,34 +74,44 @@ const decorated = computed(() =>
       return at - bt
     })
 )
-
-function goToTraining (item: Item) {
-  if (!item.skill_id) {
-    router.push('/modules')
-  } else {
-    router.push(`/modules?skill=${item.skill_id}`)
-  }
-}
-
-function viewSOP (item: Item) {
-  if (!item.sop_id) return
-  router.push(`/sops/${item.sop_id}`)
-}
 </script>
 
 <template>
   <div class="space-y-4">
+    <!-- Header with View all training (filtered) + Refresh -->
     <div class="flex items-center justify-between gap-3">
       <h1 class="text-2xl font-bold">
         My Overdue Training
       </h1>
-      <button
-        type="button"
-        class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
-        @click="load"
-      >
-        Refresh
-      </button>
+
+      <div class="flex items-center gap-2">
+        <NuxtLink
+          to="/modules?onlyOverdue=1"
+          class="inline-flex items-center px-3 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
+        >
+          <span class="mr-1">
+            View all overdue training
+          </span>
+          <svg
+            class="w-4 h-4"
+            viewBox="0 0 20 20"
+            fill="currentColor"
+            aria-hidden="true"
+          >
+            <path
+              d="M4 5h12v1.5H4V5zm0 4h12v1.5H4V9zm0 4h12v1.5H4V13z"
+            />
+          </svg>
+        </NuxtLink>
+
+        <button
+          type="button"
+          class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+          @click="load"
+        >
+          Refresh
+        </button>
+      </div>
     </div>
 
     <p class="text-sm text-gray-600">
@@ -159,24 +171,8 @@ function viewSOP (item: Item) {
             </div>
           </div>
 
-          <div class="flex gap-2 justify-end min-w-[11rem]">
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
-              @click="goToTraining(item)"
-            >
-              Start training
-            </button>
-
-            <button
-              v-if="item.sop_id"
-              type="button"
-              class="px-3 py-1.5 text-xs rounded border text-gray-700 hover:bg-gray-50"
-              @click="viewSOP(item)"
-            >
-              View SOP
-            </button>
-          </div>
+          <!-- Extracted action block -->
+          <OverdueActions :item="item" />
         </div>
       </div>
     </div>
