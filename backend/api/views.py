@@ -127,6 +127,12 @@ class ModuleViewSet(viewsets.ModelViewSet):
     queryset = Module.objects.select_related("skill", "sop")
     serializer_class = ModuleSerializer
     permission_classes = [IsManagerForWrites]
+    def get_queryset(self):
+        qs = super().get_queryset()
+        skill_id = self.request.query_params.get("skill")
+        if skill_id:
+            qs = qs.filter(skills__id=skill_id)
+        return qs
 
 
 class ModuleAttemptViewSet(viewsets.ModelViewSet):

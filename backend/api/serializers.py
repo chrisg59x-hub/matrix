@@ -161,6 +161,10 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
     module_id = serializers.SerializerMethodField()
     module_title = serializers.SerializerMethodField()
 
+    # ids so the frontend can build links
+    skill_id = serializers.IntegerField(source="skill.id", read_only=True)
+    sop_id = serializers.UUIDField(source="sop.id", read_only=True)
+    
     class Meta:
         model = RecertRequirement
         fields = [
