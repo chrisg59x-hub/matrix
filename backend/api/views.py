@@ -34,6 +34,7 @@ from learning.models import (
     UserBadge,
     XPEvent,
 )
+from rest_framework.views import APIView
 from rest_framework import decorators, permissions, response, status, viewsets, filters, generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
