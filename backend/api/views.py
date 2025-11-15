@@ -133,6 +133,19 @@ class ModuleAttemptViewSet(viewsets.ModelViewSet):
     serializer_class = ModuleAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
 
+class StartModuleAttemptView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk, format=None):
+        module = get_object_or_404(Module, pk=pk, active=True)
+
+        attempt = ModuleAttempt.objects.create(
+            user=request.user,
+            module=module,
+        )
+
+        serializer = ModuleAttemptSerializer(attempt)
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 class XPEventViewSet(viewsets.ModelViewSet):
     queryset = XPEvent.objects.select_related("user", "skill", "org")

@@ -14,7 +14,6 @@ async function load () {
   err.value = null
   try {
     const data = await get('/me/overdue-sops/')
-    // accept either plain array or paginated { results: [...] }
     rows.value = Array.isArray(data) ? data : (data.results || [])
   } catch (e) {
     err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load')
@@ -42,6 +41,23 @@ function daysOverdue (value) {
   const diffDays = Math.floor(diffMs / (1000 * 60 * 60 * 24))
   return diffDays > 0 ? diffDays : 0
 }
+
+// NEW: decide where “Start training” should send the user
+function startTrainingLink (item: any) {
+  // If backend gave us a specific module, go straight there
+  if (item.module_id) {
+    return `/modules/${item.module_id}`
+  }
+
+  // Otherwise, fall back to the modules list filtered by skill/SOP
+  const query: Record<string, string> = {}
+  if (item.skill) query.skill = String(item.skill)
+  if (item.sop) query.sop = String(item.sop)
+
+  return { path: '/modules', query }
+}
+
+
 
 // decorate rows with derived values
 const decorated = computed(() =>
@@ -133,14 +149,53 @@ const decorated = computed(() =>
 
           <!-- Placeholder for future "Start training" action -->
           <!--
-          <div class="min-w-[9rem] flex justify-end">
-            <NuxtLink
-              to="/modules"
-              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
-            >
-              View training
-            </NuxtLink>
-          </div>
+          <div
+  v-for="item in decorated"
+  :key="item.id"
+  class="bg-white border rounded p-3 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4"
+>
+  <div class="flex-1 min-w-0">
+    <div class="font-medium truncate">
+      {{ item.skill_name || 'Unspecified skill' }}
+    </div>
+    <div class="text-xs text-gray-600 mt-0.5">
+      Reason: {{ item.reason || 'Not specified' }}
+    </div>
+    <div
+      v-if="item.meta"
+      class="text-xs text-gray-500 mt-0.5 break-all"
+    >
+      Meta: {{ typeof item.meta === 'string' ? item.meta : JSON.stringify(item.meta) }}
+    </div>
+
+    <!-- Optional: show which module will be used -->
+    <div v-if="item.module_title" class="text-xs text-emerald-700 mt-0.5">
+      Module: {{ item.module_title }}
+    </div>
+  </div>
+
+  <div class="text-xs text-right min-w-[8rem] space-y-1">
+    <div>
+      <span class="font-semibold">Due date:</span>
+      <span> {{ formatDate(item.due_at || item.due_date) }}</span>
+    </div>
+    <div v-if="item._daysOverdue && item._daysOverdue > 0">
+      <span class="inline-flex items-center rounded-full bg-red-100 text-red-700 px-2 py-0.5">
+        {{ item._daysOverdue }} day<span v-if="item._daysOverdue !== 1">s</span> overdue
+      </span>
+    </div>
+  </div>
+
+  <!-- NEW: Start training button -->
+  <div class="min-w-[9rem] flex justify-end">
+    <NuxtLink
+      :to="startTrainingLink(item)"
+      class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
+    >
+      Start training
+    </NuxtLink>
+  </div>
+</div>
           -->
         </div>
       </div>

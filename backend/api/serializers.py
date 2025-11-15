@@ -104,18 +104,24 @@ class ModuleAttemptSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = ModuleAttempt
-        fields = (
+        fields = [
             "id",
-            "user",
             "module",
             "module_title",
+            "user",
+            "created_at",
             "completed_at",
             "score",
             "passed",
-            "answers",
-            "presented_questions",
-            "choice_order",
-        )
+        ]
+        read_only_fields = [
+            "id",
+            "user",
+            "created_at",
+            "completed_at",
+            "score",
+            "passed",
+        ]
 
 
 class XPEventSerializer(serializers.ModelSerializer):
@@ -150,7 +156,10 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
 class RecertRequirementSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     sop_title = serializers.CharField(source="sop.title", read_only=True)
-    due_at = serializers.DateField(source="due_date")
+
+    # New: recommended module for this requirement
+    module_id = serializers.SerializerMethodField()
+    module_title = serializers.SerializerMethodField()
 
     class Meta:
         model = RecertRequirement
@@ -158,16 +167,48 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
             "id",
             "user",
             "skill",
-            "skill_name",
             "sop",
-            "sop_title",
+            "reason",
             "due_at",
+            "due_date",
             "meta",
+            "resolved",
+            "skill_name",
+            "sop_title",
+            "module_id",
+            "module_title",
         ]
-        read_only_fields = ("user",)
+        read_only_fields = [
+            "id",
+            "user",
+            "skill",
+            "sop",
+            "resolved",
+        ]
 
-    def get_skill_name(self, obj):
-        return obj.skill.name if obj.skill else None
+    # helper: pick the “primary” module for this recert
+    def _get_primary_module(self, obj):
+        Module = apps.get_model("learning", "Module")
+
+        qs = Module.objects.filter(
+            skill=obj.skill,
+            active=True,
+        )
+
+        # If this recert is tied to a specific SOP, prefer modules for that SOP
+        if obj.sop_id:
+            qs = qs.filter(sop=obj.sop)
+
+        # simple rule: lowest difficulty, then alphabetical
+        return qs.order_by("difficulty", "title").first()
+
+    def get_module_id(self, obj):
+        module = self._get_primary_module(obj)
+        return str(module.id) if module else None
+
+    def get_module_title(self, obj):
+        module = self._get_primary_module(obj)
+        return module.title if module else None
 
 
 class LevelDefSerializer(serializers.ModelSerializer):
