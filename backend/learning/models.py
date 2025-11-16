@@ -134,21 +134,31 @@ class SupervisorSignoff(models.Model):
 class TrainingPathway(models.Model):
     """
     A named training path, usually linked to a job role / department / level.
-    Example: “Warehouse Operative – Beginner”, “Team Leader – Safety”.
+    For now we just store text labels instead of FKs to keep it simple.
     """
-    org = models.ForeignKey("accounts.Org", on_delete=models.CASCADE, related_name="training_pathways")
+    org = models.ForeignKey(
+        "accounts.Org",
+        on_delete=models.CASCADE,
+        related_name="training_pathways",
+    )
 
     name = models.CharField(max_length=200)
     description = models.TextField(blank=True)
 
-    # Optional scoping to HR structures – adjust to your actual models/fields
-    job_role = models.ForeignKey("accounts.JobRole", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
-    department = models.ForeignKey("accounts.Department", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
-    level = models.ForeignKey("accounts.LevelDef", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
+    # Optional scoping to HR structures – using plain text labels instead of FKs
+    job_role_label = models.CharField(max_length=200, blank=True)
+    department_label = models.CharField(max_length=200, blank=True)
+    level_label = models.CharField(max_length=200, blank=True)
 
     active = models.BooleanField(default=True)
 
-    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_training_pathways")
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="created_training_pathways",
+    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 
@@ -162,15 +172,33 @@ class TrainingPathway(models.Model):
 class TrainingPathwayItem(models.Model):
     """
     One requirement inside a pathway.
-    Can be a Module, a Skill, or a SOP (or combinations) – but at least one should be filled.
-    In practice you'll mostly link Modules.
+    For now we only support Modules (and optionally Skills) because SOP model
+    isn't available under learning.SOP.
     """
-    pathway = models.ForeignKey(TrainingPathway, on_delete=models.CASCADE, related_name="items")
+    pathway = models.ForeignKey(
+        TrainingPathway,
+        on_delete=models.CASCADE,
+        related_name="items",
+    )
 
     # What is required
-    module = models.ForeignKey("learning.Module", on_delete=models.CASCADE, null=True, blank=True, related_name="training_pathway_items")
-    skill = models.ForeignKey("learning.Skill", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathway_items")
-    sop = models.ForeignKey("learning.SOP", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathway_items")
+    module = models.ForeignKey(
+        "learning.Module",
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="training_pathway_items",
+    )
+    skill = models.ForeignKey(
+        "learning.Skill",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="training_pathway_items",
+    )
+
+    # If you want to reference a SOP without a FK, use a text label
+    sop_label = models.CharField(max_length=255, blank=True)
 
     # Behaviour
     required = models.BooleanField(default=True)
@@ -183,7 +211,14 @@ class TrainingPathwayItem(models.Model):
         ordering = ["order", "id"]
 
     def __str__(self):
-        label = self.module.title if self.module_id else (self.skill.name if self.skill_id else (self.sop.title if self.sop_id else "Item"))
+        if self.module_id:
+            label = self.module.title
+        elif self.skill_id:
+            label = self.skill.name
+        elif self.sop_label:
+            label = self.sop_label
+        else:
+            label = "Item"
         return f"{self.pathway.name}: {label}"
 
 class RecertRequirement(models.Model):
