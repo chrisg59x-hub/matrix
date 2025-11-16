@@ -127,13 +127,36 @@ class ModuleViewSet(viewsets.ModelViewSet):
     queryset = Module.objects.select_related("skill", "sop")
     serializer_class = ModuleSerializer
     permission_classes = [IsManagerForWrites]
+
     def get_queryset(self):
         qs = super().get_queryset()
-        skill_id = self.request.query_params.get("skill")
-        if skill_id:
-            qs = qs.filter(skills__id=skill_id)
-        return qs
+        params = self.request.query_params
+        user = self.request.user
 
+        # -------------------------
+        # Filter: ?skill=123
+        # -------------------------
+        skill_id = params.get("skill")
+        if skill_id:
+            qs = qs.filter(skill_id=skill_id)
+
+        # -------------------------
+        # Filter: ?onlyOverdue=1
+        # -------------------------
+        only_overdue = params.get("onlyOverdue")
+        if only_overdue == "1":
+            now = timezone.now()
+
+            qs = qs.filter(
+                models.Q(skill__recertrequirement__user=user) |
+                models.Q(sop__recertrequirement__user=user),
+                models.Q(skill__recertrequirement__due_at__lte=now)
+                | models.Q(skill__recertrequirement__due_date__lte=now)
+                | models.Q(sop__recertrequirement__due_at__lte=now)
+                | models.Q(sop__recertrequirement__due_date__lte=now),
+            ).distinct()
+
+        return qs
 
 class ModuleAttemptViewSet(viewsets.ModelViewSet):
     queryset = ModuleAttempt.objects.select_related("module", "user")
