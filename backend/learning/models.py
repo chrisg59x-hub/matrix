@@ -131,6 +131,60 @@ class SupervisorSignoff(models.Model):
     note = models.TextField(blank=True, default="")
     created_at = models.DateTimeField(auto_now_add=True)
 
+class TrainingPathway(models.Model):
+    """
+    A named training path, usually linked to a job role / department / level.
+    Example: “Warehouse Operative – Beginner”, “Team Leader – Safety”.
+    """
+    org = models.ForeignKey("accounts.Org", on_delete=models.CASCADE, related_name="training_pathways")
+
+    name = models.CharField(max_length=200)
+    description = models.TextField(blank=True)
+
+    # Optional scoping to HR structures – adjust to your actual models/fields
+    job_role = models.ForeignKey("accounts.JobRole", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
+    department = models.ForeignKey("accounts.Department", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
+    level = models.ForeignKey("accounts.LevelDef", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathways")
+
+    active = models.BooleanField(default=True)
+
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True, blank=True, related_name="created_training_pathways")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["name"]
+
+    def __str__(self):
+        return self.name
+
+
+class TrainingPathwayItem(models.Model):
+    """
+    One requirement inside a pathway.
+    Can be a Module, a Skill, or a SOP (or combinations) – but at least one should be filled.
+    In practice you'll mostly link Modules.
+    """
+    pathway = models.ForeignKey(TrainingPathway, on_delete=models.CASCADE, related_name="items")
+
+    # What is required
+    module = models.ForeignKey("learning.Module", on_delete=models.CASCADE, null=True, blank=True, related_name="training_pathway_items")
+    skill = models.ForeignKey("learning.Skill", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathway_items")
+    sop = models.ForeignKey("learning.SOP", on_delete=models.SET_NULL, null=True, blank=True, related_name="training_pathway_items")
+
+    # Behaviour
+    required = models.BooleanField(default=True)
+    order = models.PositiveIntegerField(default=0)
+
+    # Optional metadata
+    notes = models.TextField(blank=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+
+    def __str__(self):
+        label = self.module.title if self.module_id else (self.skill.name if self.skill_id else (self.sop.title if self.sop_id else "Item"))
+        return f"{self.pathway.name}: {label}"
 
 class RecertRequirement(models.Model):
     """
