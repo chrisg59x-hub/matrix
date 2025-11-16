@@ -164,7 +164,7 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
     # ids so the frontend can build links
     skill_id = serializers.IntegerField(source="skill.id", read_only=True)
     sop_id = serializers.UUIDField(source="sop.id", read_only=True)
-    
+
     class Meta:
         model = RecertRequirement
         fields = [
@@ -313,6 +313,11 @@ class ModuleSerializer(serializers.ModelSerializer):
 
     questions = QuestionPublicSerializer(many=True, read_only=True)
 
+    # New: recertification info per-module, per-user
+    due_at = serializers.DateTimeField(read_only=True)
+    due_date = serializers.DateField(read_only=True)
+    is_overdue = serializers.BooleanField(read_only=True, default=False)
+
     class Meta:
         model = Module
         fields = (
@@ -331,8 +336,34 @@ class ModuleSerializer(serializers.ModelSerializer):
             "shuffle_questions",
             "shuffle_choices",
             "negative_marking",
+            # new fields from the annotation:
+            "due_at",
+            "due_date",
+            "is_overdue",
         )
 
+class ModuleSummarySerializer(serializers.ModelSerializer):
+    """Lightweight module summary for attempts list."""
+
+    class Meta:
+        model = Module
+        fields = ("id", "title", "skill", "sop")
+
+
+class ModuleAttemptMeSerializer(serializers.ModelSerializer):
+    module = ModuleSummarySerializer(read_only=True)
+
+    class Meta:
+        model = ModuleAttempt
+        fields = (
+            "id",
+            "module",
+            "created_at",
+            "completed_at",
+            "score",
+            "passed",
+        )
+        read_only_fields = fields
 
 # -----------------------------------------------------------------------------
 # 5) REQUEST/RESPONSE SCHEMAS (non-model; for endpoints)

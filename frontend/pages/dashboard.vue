@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import DashboardTrainingCard from '~/components/DashboardTrainingCard.vue'
 const { get, post } = useApi()
 const modules = ref<any[]>([])
 const busy = ref(false)
@@ -42,7 +43,12 @@ async function submitAttempt() {
 <template>
   <div class="space-y-6">
     <h1 class="text-2xl font-bold">Dashboard</h1>
+    <h1 class="text-2xl font-bold">
+      Welcome back
+    </h1>
 
+    <!-- Training overview card -->
+    <DashboardTrainingCard />
     <div v-if="!started">
       <h2 class="text-lg font-semibold mb-2">Modules</h2>
       <div v-if="!modules.length" class="text-gray-500">No modules found.</div>

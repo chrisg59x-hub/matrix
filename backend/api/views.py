@@ -35,6 +35,7 @@ from learning.models import (
     XPEvent,
 )
 from rest_framework.views import APIView
+from rest_framework.response import Response
 from rest_framework import decorators, permissions, response, status, viewsets, filters, generics
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
@@ -57,6 +58,7 @@ from .serializers import (
     LeaderboardEntrySerializer,
     LevelDefSerializer,
     ModuleAttemptSerializer,
+    ModuleAttemptMeSerializer,
     ModuleSerializer,
     OrgSerializer,
     ProgressSerializer,
@@ -133,28 +135,62 @@ class ModuleViewSet(viewsets.ModelViewSet):
         params = self.request.query_params
         user = self.request.user
 
-        # -------------------------
-        # Filter: ?skill=123
-        # -------------------------
+        # ----------------------------------------------------
+        # 1) Simple skill filter: ?skill=123
+        # ----------------------------------------------------
         skill_id = params.get("skill")
         if skill_id:
             qs = qs.filter(skill_id=skill_id)
 
-        # -------------------------
-        # Filter: ?onlyOverdue=1
-        # -------------------------
+        # If we don't have an authenticated user, just return early
+        if not user or not user.is_authenticated:
+            return qs
+
+        # ----------------------------------------------------
+        # 2) Annotate recert info for this user & module
+        # ----------------------------------------------------
+        today = timezone.localdate()
+        now = timezone.now()
+
+        # Base queryset of unresolved recert requirements for this user,
+        # tied to the SAME org as the module (OuterRef("org")),
+        # and matching either the module's skill OR module's SOP.
+        base_reqs = (
+            RecertRequirement.objects
+            .filter(
+                user=user,
+                resolved=False,
+                org=models.OuterRef("org"),
+            )
+            .filter(
+                Q(skill_id=models.OuterRef("skill_id")) |
+                Q(sop_id=models.OuterRef("sop_id"))
+            )
+        )
+
+        # The “next” requirement (soonest due, regardless of overdue or not)
+        upcoming_reqs = base_reqs.order_by("due_date", "due_at")
+
+        # Only overdue requirements, for is_overdue
+        overdue_reqs = base_reqs.filter(
+            Q(due_date__lt=today) | Q(due_at__lte=now)
+        )
+
+        # Annotate each module:
+        #   - due_at / due_date: earliest requirement
+        #   - is_overdue: does any overdue requirement exist?
+        qs = qs.annotate(
+            due_at=models.Subquery(upcoming_reqs.values("due_at")[:1]),
+            due_date=models.Subquery(upcoming_reqs.values("due_date")[:1]),
+            is_overdue=models.Exists(overdue_reqs),
+        )
+
+        # ----------------------------------------------------
+        # 3) Filter: ?onlyOverdue=1 using the annotation
+        # ----------------------------------------------------
         only_overdue = params.get("onlyOverdue")
         if only_overdue == "1":
-            now = timezone.now()
-
-            qs = qs.filter(
-                models.Q(skill__recertrequirement__user=user) |
-                models.Q(sop__recertrequirement__user=user),
-                models.Q(skill__recertrequirement__due_at__lte=now)
-                | models.Q(skill__recertrequirement__due_date__lte=now)
-                | models.Q(sop__recertrequirement__due_at__lte=now)
-                | models.Q(sop__recertrequirement__due_date__lte=now),
-            ).distinct()
+            qs = qs.filter(is_overdue=True)
 
         return qs
 
@@ -176,6 +212,19 @@ class StartModuleAttemptView(APIView):
 
         serializer = ModuleAttemptSerializer(attempt)
         return Response(serializer.data, status=status.HTTP_201_CREATED)
+
+class MyModuleAttemptsView(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        qs = (
+            ModuleAttempt.objects
+            .select_related("module", "module__skill", "module__sop")
+            .filter(user=request.user)
+            .order_by("-created_at")
+        )
+        serializer = ModuleAttemptMeSerializer(qs, many=True)
+        return Response(serializer.data)
 
 class XPEventViewSet(viewsets.ModelViewSet):
     queryset = XPEvent.objects.select_related("user", "skill", "org")

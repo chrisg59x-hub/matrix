@@ -75,20 +75,18 @@ function matchesSkill (m) {
 }
 
 // Filter by overdue flag (?onlyOverdue=1)
-// This is defensive: supports has_overdue / is_overdue / next_due_at-style fields.
 function matchesOverdue (m) {
   if (!onlyOverdue.value) return true
 
-  if (typeof m.has_overdue !== 'undefined') {
-    return !!m.has_overdue
-  }
+  // Prefer backend flag if present
   if (typeof m.is_overdue !== 'undefined') {
     return !!m.is_overdue
   }
 
-  const due = m.next_due_at || m.due_at || m.due_date
-  if (due) {
-    const d = new Date(due)
+  // Fallback to client-side date check if fields are present
+  const raw = m.due_date || m.due_at
+  if (raw) {
+    const d = new Date(raw)
     if (!Number.isNaN(d.getTime())) {
       const today = new Date()
       today.setHours(0, 0, 0, 0)
@@ -99,6 +97,15 @@ function matchesOverdue (m) {
 
   // If we can't tell, don't automatically hide it.
   return true
+}
+
+// 🔹 Helper: nice label for due date (from backend due_date/due_at)
+function moduleDueDate (m) {
+  const raw = m.due_date || m.due_at
+  if (!raw) return null
+  const d = new Date(raw)
+  if (Number.isNaN(d.getTime())) return null
+  return d.toLocaleDateString()
 }
 
 const filtered = computed(() =>
@@ -204,7 +211,10 @@ async function startModule (mod) {
       <div v-if="filtered.length === 0" class="text-sm text-gray-600">
         No modules match your filters.
         <span v-if="onlyOverdue || skillFilter">
-          Try clearing the filters or navigating from <NuxtLink to="/overdue" class="text-emerald-700 underline">My Overdue Training</NuxtLink>.
+          Try clearing the filters or navigating from
+          <NuxtLink to="/overdue" class="text-emerald-700 underline">
+            My Overdue Training
+          </NuxtLink>.
         </span>
       </div>
 
@@ -225,6 +235,7 @@ async function startModule (mod) {
               {{ m.description }}
             </div>
 
+            <!-- Badge row: difficulty, duration, XP, due date, overdue -->
             <div class="mt-1 flex flex-wrap gap-2 text-[11px] text-gray-600">
               <span
                 v-if="difficultyLabel(m)"
@@ -243,6 +254,22 @@ async function startModule (mod) {
                 class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5"
               >
                 {{ xpLabel(m) }}
+              </span>
+
+              <!-- 🔹 New: due date badge -->
+              <span
+                v-if="moduleDueDate(m)"
+                class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5"
+              >
+                Due: {{ moduleDueDate(m) }}
+              </span>
+
+              <!-- 🔹 New: Overdue pill -->
+              <span
+                v-if="m.is_overdue"
+                class="inline-flex items-center rounded-full bg-red-100 text-red-700 px-2 py-0.5"
+              >
+                Overdue
               </span>
             </div>
           </div>
