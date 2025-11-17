@@ -17,6 +17,8 @@ from .views import (
     SkillViewSet,
     SOPViewSet,
     StartModuleAttemptView,
+    TrainingPathwayViewSet,
+    MyTrainingPathwaysView,
     MyModuleAttemptsView,
     MyOverdueSOPsView,
     SupervisorSignoffViewSet,
@@ -60,6 +62,7 @@ router.register(r"departments", DepartmentViewSet)
 router.register(r"teams", TeamViewSet)
 router.register(r"team-members", TeamMemberViewSet)
 router.register(r"role-assignments", RoleAssignmentViewSet)
+router.register(r"training-pathways", TrainingPathwayViewSet, basename="training-pathways")
 
 urlpatterns = [
     # Router-driven endpoints
@@ -73,6 +76,8 @@ urlpatterns = [
         MyOverdueSOPsView.as_view(),
         name="me-overdue-sops",
     ),
+    path("me/training-pathways/", MyTrainingPathwaysView.as_view(), name="my-training-pathways"),
+    path("", include(router.urls)),
     path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),  # media viewed heartbeat/complete
     # Start → Submit quiz flow (randomised/shuffled/negative marking)
     path("modules/<uuid:module_id>/start/", start_module_attempt),  # returns attempt_id + served questions

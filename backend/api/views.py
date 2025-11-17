@@ -11,7 +11,7 @@ from datetime import timedelta
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
 from django.db import models
-from django.db.models import Sum, Q #Count, F
+from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes
 from accounts.models import Org, User
@@ -27,6 +27,8 @@ from learning.models import (
     RecertRequirement,
     RoleAssignment,
     RoleSkill,
+    TrainingPathway,
+    TrainingPathwayItem,
     Skill,
     SupervisorSignoff,
     Team,
@@ -72,6 +74,9 @@ from .serializers import (
     StartAttemptSerializer,
     SubmitAttemptRequestSerializer,
     SupervisorSignoffSerializer,
+    TrainingPathwaySerializer,
+    TrainingPathwayDetailSerializer,
+    TrainingPathwayMeSerializer,
     TeamMemberSerializer,
     TeamSerializer,
     UserBadgeSerializer,
@@ -88,6 +93,90 @@ class OrgViewSet(viewsets.ModelViewSet):
     serializer_class = OrgSerializer
     permission_classes = [IsManagerForWrites]
 
+class IsOrgManager(permissions.BasePermission):
+    """
+    Placeholder – adapt to your actual manager permission.
+    Allow safe methods to all authenticated users, restrict writes.
+    """
+    def has_permission(self, request, view):
+        if request.method in permissions.SAFE_METHODS:
+            return request.user.is_authenticated
+        # tweak this to your actual org admin / manager flag
+        return getattr(request.user, "is_manager", False)
+    
+class TrainingPathwayViewSet(viewsets.ModelViewSet):
+    """
+    CRUD for pathways – mainly for managers.
+    """
+    queryset = TrainingPathway.objects.all().select_related("org", "job_role", "department", "level")
+    serializer_class = TrainingPathwaySerializer
+    permission_classes = [IsOrgManager]
+
+    def get_queryset(self):
+        qs = super().get_queryset()
+        user = self.request.user
+        if not user.is_authenticated:
+            return qs.none()
+        # Filter by user's org if you have per-org isolation
+        if hasattr(user, "org_id") and user.org_id:
+            qs = qs.filter(org=user.org_id)
+        return qs
+
+    def get_serializer_class(self):
+        if self.action in ("retrieve",):
+            return TrainingPathwayDetailSerializer
+        return super().get_serializer_class()
+
+    def perform_create(self, serializer):
+        org = getattr(self.request.user, "org", None)
+        serializer.save(org=org, created_by=self.request.user)
+
+class MyTrainingPathwaysView(APIView):
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        user = request.user
+        org = getattr(user, "org", None)
+
+        base_qs = TrainingPathway.objects.filter(active=True)
+        if org is not None:
+            base_qs = base_qs.filter(org=org)
+
+        # For now, just show all active pathways in this org.
+        # Later we can get fancy and match labels to user.profile fields.
+        base_qs = base_qs.prefetch_related("items", "items__module")
+
+        results = []
+        for p in base_qs:
+            items = [i for i in p.items.all() if i.required and i.module_id]
+            total = len(items)
+
+            if total == 0:
+                completed = 0
+            else:
+                module_ids = [i.module_id for i in items]
+                passed_ids = set(
+                    ModuleAttempt.objects.filter(
+                        user=user,
+                        module_id__in=module_ids,
+                        passed=True,
+                    ).values_list("module_id", flat=True)
+                )
+                completed = sum(1 for i in items if i.module_id in passed_ids)
+
+            percent = int(round((completed / total) * 100)) if total > 0 else 0
+
+            results.append({
+                "id": p.id,
+                "name": p.name,
+                "description": p.description,
+                "total_items": total,
+                "completed_items": completed,
+                "percent_complete": percent,
+            })
+
+        serializer = TrainingPathwayMeSerializer(results, many=True)
+        return Response(serializer.data)
 
 class UserViewSet(viewsets.ModelViewSet):
     queryset = User.objects.all()

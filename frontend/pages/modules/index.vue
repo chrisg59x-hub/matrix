@@ -212,7 +212,7 @@ async function startModule (mod) {
         No modules match your filters.
         <span v-if="onlyOverdue || skillFilter">
           Try clearing the filters or navigating from
-          <NuxtLink to="/overdue" class="text-emerald-700 underline">
+          <NuxtLink to="/training/overdue" class="text-emerald-700 underline">
             My Overdue Training
           </NuxtLink>.
         </span>

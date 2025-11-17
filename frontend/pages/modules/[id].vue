@@ -153,6 +153,14 @@ async function startTraining () {
         >
           Max attempts: {{ item.max_attempts }}
         </span>
+        <span
+          v-if="item?.due_date || item?.due_at"
+          class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5"
+        >
+          Due: {{
+            new Date(item.due_date || item.due_at).toLocaleDateString()
+          }}
+        </span>
       </div>
 
       <!-- Description -->

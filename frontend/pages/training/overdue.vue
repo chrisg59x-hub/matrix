@@ -170,7 +170,16 @@ const decorated = computed<Item[]>(() =>
               </span>
             </div>
           </div>
-
+          <div class="min-w-[9rem] flex justify-end">
+            <NuxtLink
+              :to="item.skill_id
+                ? `/modules?onlyOverdue=1&skill=${item.skill_id}`
+                : '/modules?onlyOverdue=1'"
+              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              View training
+            </NuxtLink>
+          </div>
           <!-- Extracted action block -->
           <OverdueActions :item="item" />
         </div>

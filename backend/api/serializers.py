@@ -26,6 +26,8 @@ from learning.models import (
     RoleSkill,
     Skill,
     SupervisorSignoff,
+    TrainingPathway,
+    TrainingPathwayItem,
     Team,
     TeamMember,
     UserBadge,
@@ -83,6 +85,75 @@ class SkillSerializer(serializers.ModelSerializer):
         model = Skill
         fields = "__all__"
 
+class TrainingPathwayModuleMiniSerializer(serializers.ModelSerializer):
+    """Lightweight module summary used inside pathway items."""
+    class Meta:
+        model = Module
+        fields = ("id", "title", "skill")
+
+
+class TrainingPathwayItemSerializer(serializers.ModelSerializer):
+    module = TrainingPathwayModuleMiniSerializer(read_only=True)
+
+    class Meta:
+        model = TrainingPathwayItem
+        fields = (
+            "id",
+            "required",
+            "order",
+            "notes",
+            "module",
+            "skill",
+            "sop_label",
+        )
+
+
+class TrainingPathwaySerializer(serializers.ModelSerializer):
+    """Basic pathway info (used in admin / manager UIs)."""
+
+    class Meta:
+        model = TrainingPathway
+        fields = (
+            "id",
+            "name",
+            "description",
+            "job_role_label",
+            "department_label",
+            "level_label",
+            "active",
+        )
+
+
+class TrainingPathwayDetailSerializer(serializers.ModelSerializer):
+    """Full pathway details including items."""
+    items = TrainingPathwayItemSerializer(many=True, read_only=True)
+
+    class Meta:
+        model = TrainingPathway
+        fields = (
+            "id",
+            "name",
+            "description",
+            "job_role_label",
+            "department_label",
+            "level_label",
+            "active",
+            "items",
+        )
+
+
+class TrainingPathwayMeSerializer(serializers.Serializer):
+    """
+    Per-user view of pathways with progress.
+    We feed it plain dicts from MyTrainingPathwaysView, so it's a plain Serializer,
+    not a ModelSerializer.
+    """
+    id = serializers.IntegerField()
+    name = serializers.CharField()
+    description = serializers.CharField(allow_blank=True, allow_null=True)
+    total_items = serializers.IntegerField()
+    completed_items = serializers.IntegerField()
+    percent_complete = serializers.IntegerField()
 
 class JobRoleSerializer(serializers.ModelSerializer):
     class Meta:
