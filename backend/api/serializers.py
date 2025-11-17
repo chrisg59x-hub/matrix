@@ -244,7 +244,6 @@ class RecertRequirementSerializer(serializers.ModelSerializer):
             "skill",
             "sop",
             "reason",
-            "due_at",
             "due_date",
             "meta",
             "resolved",

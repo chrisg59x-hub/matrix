@@ -16,15 +16,43 @@ async function load () {
   loading.value = true
   err.value = null
   try {
-    // Try to fetch full attempt data – ModuleAttemptViewSet should provide this
     const data = await get(`/attempts/${attemptId.value}/`)
     attempt.value = data
   } catch (e) {
-    // If the endpoint isn’t ready yet, just degrade gracefully
     err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load attempt')
   } finally {
     loading.value = false
   }
+}
+
+/**
+ * Try to locate questions in whatever shape the backend sends.
+ * This will "just start working" once you add question payloads
+ * (e.g. attempt.questions, attempt.payload.questions, etc.).
+ */
+const questions = computed(() => {
+  const a = attempt.value
+  if (!a) return []
+
+  // Common shapes we might introduce later:
+  if (Array.isArray(a.questions)) return a.questions
+  if (a.payload && Array.isArray(a.payload.questions)) return a.payload.questions
+  if (Array.isArray(a.items)) return a.items
+  if (Array.isArray(a.question_set)) return a.question_set
+
+  return []
+})
+
+function questionText (q) {
+  return q.text || q.question || q.prompt || 'Question'
+}
+
+function optionsFor (q) {
+  // Try a few likely shapes and then fall back
+  if (Array.isArray(q.choices)) return q.choices
+  if (Array.isArray(q.options)) return q.options
+  if (Array.isArray(q.answers)) return q.answers
+  return []
 }
 </script>
 
@@ -55,7 +83,7 @@ async function load () {
     <div v-else-if="err" class="text-red-600 break-all text-xs">
       {{ err }}
       <p class="mt-2 text-gray-500">
-        The attempt endpoint is reachable, but the quiz UI is not wired yet.
+        The attempt endpoint is reachable, but the quiz data may not be wired yet.
       </p>
     </div>
 
@@ -63,15 +91,74 @@ async function load () {
       No attempt data returned.
     </div>
 
-    <div v-else class="space-y-4">
-      <p class="text-sm text-gray-700">
-        This is the placeholder for the full quiz / training runner UI.
-        The raw attempt payload is shown below to help you inspect the data shape.
-      </p>
+    <div v-else class="space-y-6">
+      <!-- 🔹 CASE 1: No questions yet – training-only module -->
+      <div v-if="questions.length === 0" class="space-y-2">
+        <p class="text-sm text-gray-700">
+          This training attempt does not have any interactive quiz questions yet.
+        </p>
+        <p class="text-xs text-gray-500">
+          You can still use the module content and SOPs for training. When you later
+          add question data to the <code>/attempts/{{ attemptId }}/</code> response,
+          this page will automatically start showing a quiz UI.
+        </p>
+      </div>
 
-      <pre class="text-xs bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto">
+      <!-- 🔹 CASE 2: We have questions – basic quiz layout -->
+      <div v-else class="space-y-4">
+        <h2 class="text-sm font-semibold text-gray-800">
+          Quiz questions (preview UI)
+        </h2>
+
+        <div class="space-y-3">
+          <div
+            v-for="(q, idx) in questions"
+            :key="q.id || idx"
+            class="border rounded p-3 bg-white"
+          >
+            <div class="font-medium text-sm mb-2">
+              Q{{ idx + 1 }}. {{ questionText(q) }}
+            </div>
+
+            <div v-if="optionsFor(q).length" class="space-y-1">
+              <label
+                v-for="(opt, oIdx) in optionsFor(q)"
+                :key="opt.id || oIdx"
+                class="flex items-center gap-2 text-xs cursor-pointer"
+              >
+                <input
+                  type="radio"
+                  :name="`q-${idx}`"
+                  class="rounded border-gray-300"
+                >
+                <span>
+                  {{ opt.text || opt.label || opt }}
+                </span>
+              </label>
+            </div>
+
+            <div v-else class="text-xs text-gray-500">
+              No options found for this question yet.
+            </div>
+          </div>
+        </div>
+
+        <p class="text-xs text-gray-500">
+          This is a basic placeholder UI. Once we know the exact data shape
+          (e.g. how answers are marked, scoring, etc.), we can wire in state,
+          validation, and a “Submit attempt” POST call.
+        </p>
+      </div>
+
+      <!-- 🔹 Always keep raw payload visible for debugging -->
+      <section class="space-y-2">
+        <h2 class="text-sm font-semibold text-gray-800">
+          Raw attempt payload (debug)
+        </h2>
+        <pre class="text-xs bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto">
 {{ JSON.stringify(attempt, null, 2) }}
-      </pre>
+        </pre>
+      </section>
     </div>
   </div>
 </template>
