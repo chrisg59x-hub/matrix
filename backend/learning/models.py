@@ -104,6 +104,18 @@ class ModuleAttempt(models.Model):
     class Meta:
         ordering = ["-created_at"]
 
+class ModuleAttemptQuestion(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    attempt = models.ForeignKey("ModuleAttempt", on_delete=models.CASCADE, related_name="attempt_questions")
+    question = models.ForeignKey("Question", on_delete=models.CASCADE, related_name="attempt_instances")
+
+    selection_history = models.JSONField(default=list, blank=True)
+    final_choices = models.JSONField(default=list, blank=True)
+
+    correct = models.BooleanField(default=False)
+    points_awarded = models.IntegerField(default=0)
+    time_taken = models.FloatField(default=0.0)
+    changed_answer = models.BooleanField(default=False)
 
 class XPEvent(models.Model):
     SOURCE = [
