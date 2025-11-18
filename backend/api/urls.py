@@ -18,6 +18,7 @@ from .views import (
     SOPViewSet,
     StartModuleAttemptView,
     manager_dashboard,
+    my_dashboard,
     start_module_attempt,
     submit_started_attempt,   # now per-question
     next_question,
@@ -91,6 +92,7 @@ urlpatterns = [
     path("attempts/<uuid:attempt_id>/submit/", submit_started_attempt, name="submit-question"),
     path("attempts/<uuid:attempt_id>/finish/", finish_attempt, name="finish-attempt"),
     path("manager/dashboard/", manager_dashboard, name="manager-dashboard"),
+    path("me/dashboard/", my_dashboard, name="my-dashboard"),
     path("me/module-attempts/", MyModuleAttemptsView.as_view(), name="my-module-attempts"),
     # Simple org leaderboard
     path("leaderboard/", leaderboard),

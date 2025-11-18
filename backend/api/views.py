@@ -48,7 +48,7 @@ from sops.models import SOP, SOPView
 # -----------------------------------------------------------------------------
 # 4) Permissions
 # -----------------------------------------------------------------------------
-from .permissions import IsManagerForWrites
+from .permissions import IsManagerForWrites, IsManagerOnly
 
 # -----------------------------------------------------------------------------
 # 3) Serializer imports
@@ -76,6 +76,7 @@ from .serializers import (
     NextQuestionSerializer,
     SingleAnswerRequestSerializer,
     ManagerDashboardSerializer,
+    MyDashboardSerializer,  
     SingleAnswerResponseSerializer,
     SupervisorSignoffSerializer,
     TrainingPathwaySerializer,
@@ -712,7 +713,77 @@ def leaderboard(request):
         })
     return response.Response(results)
 
+@extend_schema(responses=MyDashboardSerializer)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def my_dashboard(request):
+    """
+    Personal dashboard for the current user.
+    Combines XP, level, attempt stats and overdue recertification info.
+    """
+    user = request.user
 
+    # --- XP + level (same curve as my_progress) -----------------------------
+    total_xp = XPEvent.objects.filter(user=user).aggregate(s=Sum("amount"))["s"] or 0
+    overall_level = level_from_total_xp(total_xp)
+    next_level = overall_level + 1
+    xp_next = (next_level * 10) ** 2
+    xp_to_next = max(0, xp_next - total_xp)
+
+    # --- Attempts -----------------------------------------------------------
+    attempts_qs = ModuleAttempt.objects.filter(user=user)
+    attempts_total = attempts_qs.count()
+    attempts_passed = attempts_qs.filter(passed=True).count()
+
+    now = timezone.now()
+    since_30 = now - timedelta(days=30)
+    attempts_last_30 = attempts_qs.filter(created_at__gte=since_30).count()
+
+    avg_score_val = attempts_qs.aggregate(avg=Avg("score"))["avg"] or 0.0
+    avg_score_val = float(round(avg_score_val, 1))
+
+    # --- Overdue recert requirements ---------------------------------------
+    today = timezone.localdate()
+    overdue_qs = (
+        RecertRequirement.objects
+        .select_related("skill", "sop")
+        .filter(
+            user=user,
+            resolved=False,
+        )
+        .filter(
+            Q(due_date__lt=today) | Q(due_at__lte=now)
+        )
+        .order_by("due_date", "due_at")
+    )
+
+    overdue_recerts = []
+    for r in overdue_qs:
+        overdue_recerts.append(
+            {
+                "id": r.id,
+                "skill_name": getattr(r.skill, "name", None),
+                "sop_title": getattr(r.sop, "title", None),
+                "reason": r.reason,
+                "due_date": r.due_date,
+                "due_at": r.due_at,
+            }
+        )
+
+    payload = {
+        "overall_xp": int(total_xp),
+        "overall_level": int(overall_level),
+        "next_level": int(next_level),
+        "xp_to_next": int(xp_to_next),
+        "attempts_total": int(attempts_total),
+        "attempts_passed": int(attempts_passed),
+        "attempts_last_30_days": int(attempts_last_30),
+        "avg_score": avg_score_val,
+        "overdue_recerts": overdue_recerts,
+    }
+
+    ser = MyDashboardSerializer(payload)
+    return response.Response(ser.data)
 
 
 
@@ -1624,7 +1695,7 @@ def finish_attempt(request, attempt_id: str):
 
 @extend_schema(responses=ManagerDashboardSerializer)
 @decorators.api_view(["GET"])
-@decorators.permission_classes([IsManagerForWrites])
+@decorators.permission_classes([IsManagerOnly])
 def manager_dashboard(request):
     """
     Simple org-level dashboard for managers/admins.

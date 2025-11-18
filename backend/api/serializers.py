@@ -329,7 +329,20 @@ class ManagerDashboardSerializer(serializers.Serializer):
     attempts_last_30_days = serializers.IntegerField()
     total_xp = serializers.IntegerField()
     avg_score = serializers.FloatField()
-    
+
+class MyDashboardSerializer(serializers.Serializer):
+    overall_xp = serializers.IntegerField()
+    overall_level = serializers.IntegerField()
+    next_level = serializers.IntegerField()
+    xp_to_next = serializers.IntegerField()
+
+    attempts_total = serializers.IntegerField()
+    attempts_passed = serializers.IntegerField()
+    attempts_last_30_days = serializers.IntegerField()
+    avg_score = serializers.FloatField()
+
+    overdue_recerts = serializers.ListField(child=serializers.DictField())
+
 class BadgeSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     team_name = serializers.CharField(source="team.name", read_only=True)
