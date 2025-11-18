@@ -14,6 +14,8 @@ type Item = {
   reason?: string | null
   meta?: any
   _daysOverdue?: number | null
+  module_id?: string | null
+  module_title?: string | null
 }
 
 const rows = ref<Item[]>([])

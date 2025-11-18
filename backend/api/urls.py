@@ -74,8 +74,8 @@ urlpatterns = [
     # Router-driven endpoints
     path("", include(router.urls)),
     # --- Core function endpoints ---
-    path("me/progress/", my_progress),  # current user's XP/level/skills
-    path("me/whoami/", whoami),  # username + role (used by Swagger banner)
+    path("my-progress/", my_progress, name="my-progress"),
+    path("me/whoami/", whoami, name="whoami"),  # username + role (used by Swagger banner)
     path("me/sop-views/", my_sop_views),
     path(
         "me/overdue-sops/",
