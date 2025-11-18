@@ -74,6 +74,19 @@ class Module(models.Model):
     shuffle_questions = models.BooleanField(default=True)
     shuffle_choices = models.BooleanField(default=True)
     negative_marking = models.BooleanField(default=True)  # applies to multi-select
+    FEEDBACK_MODES = [
+    ("immediate", "Immediate after each question"),
+    ("end", "Only at the end of the quiz"),
+    ("none", "No feedback"),
+    ("mixed", "Mixed: single/truefalse=immediate, multi-select=end"),
+    ]
+
+    feedback_mode = models.CharField(
+        max_length=20,
+        choices=FEEDBACK_MODES,
+        default="end",
+        help_text="Controls when the learner sees feedback for quiz questions.",
+    )
 
     def __str__(self):
         return self.title
@@ -105,6 +118,7 @@ class ModuleAttempt(models.Model):
         ordering = ["-created_at"]
 
 class ModuleAttemptQuestion(models.Model):
+    
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     attempt = models.ForeignKey("ModuleAttempt", on_delete=models.CASCADE, related_name="attempt_questions")
     question = models.ForeignKey("Question", on_delete=models.CASCADE, related_name="attempt_instances")

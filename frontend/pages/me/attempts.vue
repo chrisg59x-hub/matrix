@@ -180,6 +180,12 @@ function resumeAttempt (a: Attempt) {
               </td>
               <td class="px-3 py-2 text-right">
                 <div class="inline-flex gap-2">
+                  <NuxtLink
+                    :to="`/attempts/${a.module?.id}/review`"
+                    class="text-xs text-emerald-700 hover:underline"
+                  >
+                    Review
+                  </NuxtLink>
                   <button
                     type="button"
                     class="px-2 py-1 text-xs rounded border bg-white hover:bg-gray-50"

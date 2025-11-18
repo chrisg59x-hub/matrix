@@ -11,9 +11,9 @@ from datetime import timedelta
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
 from django.db import models
-from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value
+from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value, Avg
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
-from rest_framework.decorators import api_view, permission_classes
+from rest_framework.decorators import api_view, permission_classes, action
 from accounts.models import Org, User
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -73,6 +73,10 @@ from .serializers import (
     SOPViewSerializer,
     StartAttemptSerializer,
     SubmitAttemptRequestSerializer,
+    NextQuestionSerializer,
+    SingleAnswerRequestSerializer,
+    ManagerDashboardSerializer,
+    SingleAnswerResponseSerializer,
     SupervisorSignoffSerializer,
     TrainingPathwaySerializer,
     TrainingPathwayDetailSerializer,
@@ -282,11 +286,183 @@ class ModuleViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_overdue=True)
 
         return qs
+    
+    @action(detail=True, methods=["get"])
+    def stats(self, request, pk=None):
+        """
+        Simple stats for a single module:
+        - total attempts
+        - unique users
+        - pass count & pass rate
+        - average score
+        - timestamps for last attempt / last pass
+        """
+        module = self.get_object()
+
+        qs = ModuleAttempt.objects.filter(module=module)
+
+        total_attempts = qs.count()
+        unique_users = qs.values("user_id").distinct().count()
+        pass_count = qs.filter(passed=True).count()
+        agg = qs.aggregate(avg_score=Avg("score"))
+
+        last_attempt = qs.order_by("-created_at").values_list("created_at", flat=True).first()
+        last_pass = (
+            qs.filter(passed=True)
+            .order_by("-completed_at")
+            .values_list("completed_at", flat=True)
+            .first()
+        )
+
+        pass_rate = float(round(pass_count * 100.0 / total_attempts, 1)) if total_attempts else 0.0
+        avg_score = float(round(agg["avg_score"] or 0.0, 1))
+
+        payload = {
+            "module_id": str(module.id),
+            "title": module.title,
+            "total_attempts": total_attempts,
+            "unique_users": unique_users,
+            "pass_count": pass_count,
+            "pass_rate": pass_rate,
+            "avg_score": avg_score,
+            "last_attempt": last_attempt,
+            "last_pass": last_pass,
+        }
+
+        # If you want Swagger to know about it:
+        # from .serializers import ModuleStatsSerializer
+        # return Response(ModuleStatsSerializer(payload).data)
+
+        return Response(payload)
 
 class ModuleAttemptViewSet(viewsets.ModelViewSet):
     queryset = ModuleAttempt.objects.select_related("module", "user")
     serializer_class = ModuleAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
+
+    @action(detail=True, methods=["get"])
+    def review(self, request, pk=None):
+        """
+        Detailed review for a single attempt, including per-question correctness
+        and points. Uses ModuleAttemptQuestion where available, falls back to
+        recomputing from attempt.answers for legacy attempts.
+        """
+        attempt = self.get_object()
+        user = request.user
+
+        # Permission: owner OR manager/admin
+        if attempt.user_id != user.id and getattr(user, "biz_role", "") not in ("manager", "admin"):
+            raise PermissionDenied("You can only review your own attempts.")
+
+        module = attempt.module
+
+        questions_data = []
+
+        # Prefer detailed rows from ModuleAttemptQuestion if present
+        if attempt.attempt_questions.exists():
+            aqs = (
+                attempt.attempt_questions
+                .select_related("question")
+                .prefetch_related("question__choices")
+            )
+
+            for aq in aqs.order_by("question__order", "question__id"):
+                q = aq.question
+                choices = list(q.choices.all())
+                questions_data.append(
+                    {
+                        "id": q.id,
+                        "text": q.text,
+                        "qtype": q.qtype,
+                        "points": float(q.points),
+                        "explanation": q.explanation or "",
+                        "choices": [
+                            {
+                                "id": c.id,
+                                "text": c.text,
+                                "is_correct": c.is_correct,
+                            }
+                            for c in choices
+                        ],
+                        "selected_choice_ids": aq.final_choices or [],
+                        "correct": aq.correct,
+                        "earned": float(aq.points_awarded),
+                        "max_points": float(q.points),
+                    }
+                )
+        else:
+            # Fallback: derive per-question breakdown from attempt.answers
+            answers = attempt.answers or {}
+            qs = module.questions.prefetch_related("choices").all()
+
+            for q in qs:
+                qid = str(q.id)
+                selected_ids = [str(x) for x in answers.get(qid, [])]
+
+                choices = list(q.choices.all())
+                correct_ids = {str(c.id) for c in choices if c.is_correct}
+                wrong_ids = {str(c.id) for c in choices if not c.is_correct}
+                chosen = set(selected_ids)
+
+                max_pts = float(q.points)
+                earned = 0.0
+                correct_flag = False
+
+                if q.qtype in ("single", "truefalse"):
+                    if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
+                        earned = max_pts
+                        correct_flag = True
+                else:
+                    total_correct = len(correct_ids)
+                    sel_correct = len(chosen & correct_ids)
+                    sel_wrong = len(chosen & wrong_ids)
+
+                    if total_correct > 0:
+                        fraction = sel_correct / total_correct
+                        if module.negative_marking:
+                            fraction -= sel_wrong / max(1, len(wrong_ids))
+                        fraction = max(0.0, min(1.0, fraction))
+                        earned = round(max_pts * fraction, 2)
+                        correct_flag = fraction == 1.0 and sel_wrong == 0
+
+                questions_data.append(
+                    {
+                        "id": q.id,
+                        "text": q.text,
+                        "qtype": q.qtype,
+                        "points": max_pts,
+                        "explanation": q.explanation or "",
+                        "choices": [
+                            {
+                                "id": c.id,
+                                "text": c.text,
+                                "is_correct": c.is_correct,
+                            }
+                            for c in choices
+                        ],
+                        "selected_choice_ids": selected_ids,
+                        "correct": correct_flag,
+                        "earned": earned,
+                        "max_points": max_pts,
+                    }
+                )
+
+        payload = {
+            "id": str(attempt.id),
+            "module_id": str(module.id),
+            "module_title": module.title,
+            "user_id": str(attempt.user_id),
+            "username": getattr(attempt.user, "username", ""),
+            "score": attempt.score,
+            "passed": attempt.passed,
+            "created_at": attempt.created_at,
+            "completed_at": attempt.completed_at,
+            "questions": questions_data,
+        }
+
+        serializer = AttemptReviewSerializer(payload)
+        return response.Response(serializer.data)
+
 
 class StartModuleAttemptView(APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -552,6 +728,32 @@ def leaderboard(request):
 # NOTE: your detailed implementations for start_module_attempt() and
 #       submit_started_attempt() remain unchanged — keep them here below.
 #       Include @extend_schema annotations as shown earlier.
+def _get_next_unanswered_question(attempt: ModuleAttempt):
+    """
+    Returns (Question or None, remaining_count, total_count) based on
+    presented_questions and existing ModuleAttemptQuestion rows.
+    """
+    presented_ids = [str(qid) for qid in (attempt.presented_questions or [])]
+    total = len(presented_ids)
+    if total == 0:
+        return None, 0, 0
+
+    answered_ids = set(
+        attempt.attempt_questions.values_list("question_id", flat=True)
+    )
+
+    # preserve order from presented_questions
+    for qid in presented_ids:
+        if qid not in {str(aid) for aid in answered_ids}:
+            # next unanswered
+            q = attempt.module.questions.prefetch_related("choices").filter(id=qid).first()
+            if not q:
+                continue
+            remaining = len([x for x in presented_ids if x not in {str(aid) for aid in answered_ids}])
+            return q, remaining, total
+
+    # none left
+    return None, 0, total
 
 def _require_manager(request):
     u = request.user
@@ -911,6 +1113,46 @@ def start_module_attempt(request, module_id: str):
     }
     return response.Response(payload, status=status.HTTP_200_OK)
 
+@extend_schema(
+    responses=NextQuestionSerializer,
+    description="Get the next unanswered question for an attempt, based on presented_questions."
+)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def next_question(request, attempt_id: str):
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id, user=request.user
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    q, remaining, total = _get_next_unanswered_question(attempt)
+
+    if not q:
+        # No more questions
+        payload = {
+            "attempt_id": attempt.id,
+            "question": None,
+            "remaining": 0,
+            "total": total,
+        }
+        return response.Response(payload, status=status.HTTP_200_OK)
+
+    # Respect stored choice order from attempt.choice_order
+    choice_order = attempt.choice_order or {}
+    ordered_ids = choice_order.get(str(q.id)) or [str(c.id) for c in q.choices.all()]
+    ordered_choices = [c for cid in ordered_ids for c in q.choices.all() if str(c.id) == cid]
+    q._prefetched_objects_cache = {"choices": ordered_choices}
+
+    payload = {
+        "attempt_id": attempt.id,
+        "question": QuestionPublicSerializer(q).data,
+        "remaining": remaining,
+        "total": total,
+    }
+    return response.Response(payload, status=status.HTTP_200_OK)
+
 @extend_schema(responses=SOPViewSerializer(many=True))
 @decorators.api_view(["GET"])
 @decorators.permission_classes([permissions.IsAuthenticated])
@@ -922,7 +1164,7 @@ def my_sop_views(request):
     return response.Response(SOPViewSerializer(qs, many=True).data)
 
 @extend_schema(
-    request=SubmitAttemptRequestSerializer,
+    request=SubmitAttemptRequestSerializer,  # legacy; new flow also works
     responses={
         "200": {
             "type": "object",
@@ -948,43 +1190,352 @@ def my_sop_views(request):
             },
         }
     },
+    description=(
+        "Submit answers for an attempt. "
+        "Supports both legacy all-at-once payloads (answers=[...]) "
+        "and new per-question payloads (question_id + choice_ids)."
+    ),
 )
 @decorators.api_view(["POST"])
 @decorators.permission_classes([permissions.IsAuthenticated])
 def submit_started_attempt(request, attempt_id: str):
     """
-    Submit answers for a started attempt.
-    Supports negative marking for multi-select & returns per-question feedback.
+    Hybrid submit endpoint:
+
+    - If request.data contains 'answers' (list) -> legacy all-at-once scoring
+    - Else expects single-question payload:
+        {question_id, choice_ids, time_taken?}
     """
     try:
-        attempt = ModuleAttempt.objects.select_related("module").get(id=attempt_id, user=request.user)
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id, user=request.user
+        )
     except ModuleAttempt.DoesNotExist:
         raise ValidationError("Attempt not found.")
 
     module = attempt.module
+    data = request.data or {}
+
+    # ------------------------------------------------------------------
+    # 1) Legacy mode: answers = [...]
+    # ------------------------------------------------------------------
+    if isinstance(data.get("answers"), list):
+        answers = data["answers"]
+
+        presented_ids = [str(x) for x in (attempt.presented_questions or [])]
+        if not presented_ids:
+            raise ValidationError("Attempt has no presented questions. Start again.")
+
+        # Map question_id -> Question with choices
+        questions = list(
+            module.questions.prefetch_related("choices").filter(id__in=presented_ids)
+        )
+        q_map = {str(q.id): q for q in questions}
+
+        chosen_map = {}
+        for a in answers:
+            qid = str(a.get("question_id"))
+            cids = [str(cid) for cid in (a.get("choice_ids") or [])]
+            chosen_map[qid] = set(cids)
+
+        total_earned = 0.0
+        total_max = 0.0
+        feedback = []
+
+        for qid in presented_ids:
+            q = q_map.get(qid)
+            if not q:
+                continue
+
+            max_pts = float(q.points)
+            total_max += max_pts
+
+            correct_ids = {str(c.id) for c in q.choices.filter(is_correct=True)}
+            wrong_ids = {str(c.id) for c in q.choices.filter(is_correct=False)}
+            chosen = chosen_map.get(qid, set())
+
+            earned = 0.0
+            correct_flag = False
+            msg = ""
+
+            if q.qtype in ("single", "truefalse"):
+                if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
+                    earned = max_pts
+                    correct_flag = True
+                else:
+                    earned = 0.0
+                msg = q.explanation or ("Correct." if correct_flag else "Incorrect.")
+            else:
+                total_correct = len(correct_ids)
+                sel_correct = len(chosen & correct_ids)
+                sel_wrong = len(chosen & wrong_ids)
+
+                if total_correct == 0:
+                    earned = 0.0
+                    correct_flag = False
+                    msg = "No correct choices configured."
+                else:
+                    fraction = sel_correct / total_correct
+                    if module.negative_marking:
+                        fraction -= sel_wrong / max(1, len(wrong_ids))
+                    fraction = max(0.0, min(1.0, fraction))
+                    earned = round(max_pts * fraction, 2)
+                    correct_flag = fraction == 1.0 and sel_wrong == 0
+
+                    if sel_wrong and module.negative_marking:
+                        msg = "Some incorrect choices selected."
+                    elif sel_correct < total_correct:
+                        msg = "You missed some correct choices."
+                    else:
+                        msg = "Correct."
+                    if q.explanation:
+                        msg = f"{msg} {q.explanation}"
+
+            total_earned += earned
+            feedback.append(
+                {
+                    "question_id": qid,
+                    "earned": earned,
+                    "max": max_pts,
+                    "correct": correct_flag,
+                    "message": msg,
+                }
+            )
+
+        percent = int(round((total_earned / total_max) * 100)) if total_max > 0 else 0
+        passed = percent >= (module.pass_mark or module.passing_score)
+
+        attempt.completed_at = timezone.now()
+        attempt.passed = passed
+        attempt.score = percent
+        attempt.answers = {
+            qid: list(chosen_map.get(qid, set())) for qid in presented_ids
+        }
+        attempt.save()
+
+        return response.Response(
+            {
+                "attempt_id": str(attempt.id),
+                "percent": percent,
+                "passed": passed,
+                "score": total_earned,
+                "max_score": total_max,
+                "feedback": feedback,
+            },
+            status=status.HTTP_200_OK,
+        )
+
+    # ------------------------------------------------------------------
+    # 2) New mode: single-question submit
+    # ------------------------------------------------------------------
+    # At this point, we expect question_id + choice_ids
+    from learning.models import ModuleAttemptQuestion  # local import to avoid circular
+
+    req = SingleAnswerRequestSerializer(data=data)
+    req.is_valid(raise_exception=True)
+
+    qid_str = str(req.validated_data["question_id"])
+    choice_ids = [str(cid) for cid in req.validated_data.get("choice_ids") or []]
+    time_taken = float(req.validated_data.get("time_taken") or 0.0)
 
     presented_ids = [str(x) for x in (attempt.presented_questions or [])]
-    if not presented_ids:
-        raise ValidationError("Attempt has no presented questions. Start again.")
+    if qid_str not in presented_ids:
+        raise ValidationError("Question not part of this attempt.")
 
-    # Build map question_id -> Question (with choices)
-    questions = list(module.questions.prefetch_related("choices").filter(id__in=presented_ids))
+    try:
+        q = module.questions.prefetch_related("choices").get(id=qid_str)
+    except Question.DoesNotExist:
+        raise ValidationError("Question not found for this module.")
+
+    max_pts = float(q.points)
+    correct_ids = {str(c.id) for c in q.choices.filter(is_correct=True)}
+    wrong_ids = {str(c.id) for c in q.choices.filter(is_correct=False)}
+    chosen = set(choice_ids)
+
+    earned = 0.0
+    correct_flag = False
+    msg = ""
+
+    if q.qtype in ("single", "truefalse"):
+        if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
+            earned = max_pts
+            correct_flag = True
+        else:
+            earned = 0.0
+        msg = q.explanation or ("Correct." if correct_flag else "Incorrect.")
+    else:
+        total_correct = len(correct_ids)
+        sel_correct = len(chosen & correct_ids)
+        sel_wrong = len(chosen & wrong_ids)
+
+        if total_correct == 0:
+            earned = 0.0
+            correct_flag = False
+            msg = "No correct choices configured."
+        else:
+            fraction = sel_correct / total_correct
+            if module.negative_marking:
+                fraction -= sel_wrong / max(1, len(wrong_ids))
+            fraction = max(0.0, min(1.0, fraction))
+            earned = round(max_pts * fraction, 2)
+            correct_flag = fraction == 1.0 and sel_wrong == 0
+
+            if sel_wrong and module.negative_marking:
+                msg = "Some incorrect choices selected."
+            elif sel_correct < total_correct:
+                msg = "You missed some correct choices."
+            else:
+                msg = "Correct."
+            if q.explanation:
+                msg = f"{msg} {q.explanation}"
+
+    # Upsert ModuleAttemptQuestion
+    maq, created = ModuleAttemptQuestion.objects.get_or_create(
+        attempt=attempt,
+        question=q,
+        defaults={
+            "selection_history": [],
+            "final_choices": [],
+            "correct": False,
+            "points_awarded": 0,
+            "time_taken": 0.0,
+            "changed_answer": False,
+        },
+    )
+
+    history = maq.selection_history or []
+    history.append(
+        {
+            "choice_ids": choice_ids,
+            "timestamp": timezone.now().isoformat(),
+            "time_taken": time_taken,
+        }
+    )
+
+    maq.selection_history = history
+    maq.final_choices = choice_ids
+    maq.correct = correct_flag
+    maq.points_awarded = earned
+    maq.time_taken = (maq.time_taken or 0.0) + time_taken
+    maq.changed_answer = len(history) > 1
+    maq.save()
+
+    # Update attempt.answers for backwards compatibility
+    answers_map = attempt.answers or {}
+    answers_map[qid_str] = choice_ids
+    attempt.answers = answers_map
+    attempt.save(update_fields=["answers"])
+
+    # Check if all questions answered
+    presented_set = set(presented_ids)
+    answered_set = set(str(x) for x in attempt.attempt_questions.values_list("question_id", flat=True))
+    all_answered = presented_set.issubset(answered_set)
+
+    completed = False
+    if all_answered and not attempt.completed_at:
+        # Compute overall score from ModuleAttemptQuestion
+        aqs = list(attempt.attempt_questions.select_related("question").all())
+        total_earned = sum(aq.points_awarded for aq in aqs)
+        total_max = sum(float(aq.question.points) for aq in aqs) or 1.0
+        percent = int(round((total_earned / total_max) * 100))
+
+        attempt.score = percent
+        attempt.passed = percent >= (module.pass_mark or module.passing_score)
+        attempt.completed_at = timezone.now()
+        attempt.save(update_fields=["score", "passed", "completed_at"])
+        completed = True  # XP awarded by ModuleAttempt post_save signal
+
+    # Apply feedback_mode
+    mode = module.feedback_mode or "end"
+    include_feedback = False
+
+    if mode == "immediate":
+        include_feedback = True
+    elif mode == "mixed" and q.qtype in ("single", "truefalse"):
+        include_feedback = True
+    elif mode == "none":
+        include_feedback = False
+    # mode == "end" → no per-question feedback, only final summary
+
+    resp_payload = {
+        "attempt_id": str(attempt.id),
+        "question_id": qid_str,
+        "completed": completed,
+        "remaining": max(0, len(presented_ids) - len(answered_set)),
+    }
+
+    if include_feedback:
+        resp_payload.update(
+            {
+                "correct": correct_flag,
+                "earned": earned,
+                "max_points": max_pts,
+                "message": msg,
+            }
+        )
+
+    return response.Response(resp_payload, status=status.HTTP_200_OK)
+
+@extend_schema(
+    responses={
+        "200": {
+            "type": "object",
+            "properties": {
+                "attempt_id": {"type": "string", "format": "uuid"},
+                "percent": {"type": "integer"},
+                "passed": {"type": "boolean"},
+                "score": {"type": "number"},
+                "max_score": {"type": "number"},
+                "feedback": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "question_id": {"type": "string", "format": "uuid"},
+                            "earned": {"type": "number"},
+                            "max": {"type": "number"},
+                            "correct": {"type": "boolean"},
+                            "message": {"type": "string"},
+                        },
+                    },
+                },
+            },
+        }
+    },
+    description="Finalise an attempt and return overall result + per-question feedback.",
+)
+@decorators.api_view(["POST"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def finish_attempt(request, attempt_id: str):
+    """
+    Finalise an attempt (if not already) and return a full feedback summary.
+
+    Uses ModuleAttemptQuestion for per-question scores and correctness.
+    """
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id, user=request.user
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    module = attempt.module
+    presented_ids = [str(x) for x in (attempt.presented_questions or [])]
+    if not presented_ids:
+        raise ValidationError("Attempt has no presented questions.")
+
+    # Load questions with choices
+    questions = list(
+        module.questions.prefetch_related("choices").filter(id__in=presented_ids)
+    )
     q_map = {str(q.id): q for q in questions}
 
-    # Payload
-    data = request.data or {}
-    answers = data.get("answers", [])
-    if not isinstance(answers, list):
-        raise ValidationError("answers must be an array.")
+    # Map question_id -> ModuleAttemptQuestion
+    from learning.models import ModuleAttemptQuestion
 
-    # Normalize choices selected
-    chosen_map = {}
-    for a in answers:
-        qid = str(a.get("question_id"))
-        cids = [str(cid) for cid in (a.get("choice_ids") or [])]
-        chosen_map[qid] = set(cids)
+    maq_qs = ModuleAttemptQuestion.objects.filter(attempt=attempt)
+    maq_map = {str(aq.question_id): aq for aq in maq_qs}
 
-    # Score
     total_earned = 0.0
     total_max = 0.0
     feedback = []
@@ -997,39 +1548,38 @@ def submit_started_attempt(request, attempt_id: str):
         max_pts = float(q.points)
         total_max += max_pts
 
+        aq = maq_map.get(qid)
+        if not aq:
+            # unanswered question
+            feedback.append(
+                {
+                    "question_id": qid,
+                    "earned": 0.0,
+                    "max": max_pts,
+                    "correct": False,
+                    "message": "Not answered.",
+                }
+            )
+            continue
+
+        total_earned += aq.points_awarded
+        correct_flag = aq.correct
+        chosen = set(aq.final_choices or [])
+
         correct_ids = {str(c.id) for c in q.choices.filter(is_correct=True)}
         wrong_ids = {str(c.id) for c in q.choices.filter(is_correct=False)}
-        chosen = chosen_map.get(qid, set())
 
-        earned = 0.0
-        correct_flag = False
-        msg = ""
-
+        # Rebuild a human message, similar to old submit_started_attempt
         if q.qtype in ("single", "truefalse"):
-            if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
-                earned = max_pts
-                correct_flag = True
-            else:
-                earned = 0.0
             msg = q.explanation or ("Correct." if correct_flag else "Incorrect.")
         else:
-            # Multi-select with optional negative marking
             total_correct = len(correct_ids)
             sel_correct = len(chosen & correct_ids)
             sel_wrong = len(chosen & wrong_ids)
 
             if total_correct == 0:
-                earned = 0.0
-                correct_flag = False
                 msg = "No correct choices configured."
             else:
-                fraction = sel_correct / total_correct
-                if module.negative_marking:
-                    fraction -= sel_wrong / max(1, len(wrong_ids))
-                fraction = max(0.0, min(1.0, fraction))
-                earned = round(max_pts * fraction, 2)
-                correct_flag = fraction == 1.0 and sel_wrong == 0
-
                 if sel_wrong and module.negative_marking:
                     msg = "Some incorrect choices selected."
                 elif sel_correct < total_correct:
@@ -1039,11 +1589,10 @@ def submit_started_attempt(request, attempt_id: str):
                 if q.explanation:
                     msg = f"{msg} {q.explanation}"
 
-        total_earned += earned
         feedback.append(
             {
                 "question_id": qid,
-                "earned": earned,
+                "earned": aq.points_awarded,
                 "max": max_pts,
                 "correct": correct_flag,
                 "message": msg,
@@ -1053,12 +1602,13 @@ def submit_started_attempt(request, attempt_id: str):
     percent = int(round((total_earned / total_max) * 100)) if total_max > 0 else 0
     passed = percent >= (module.pass_mark or module.passing_score)
 
-    # Finalise attempt
-    attempt.completed_at = timezone.now()
-    attempt.passed = passed
-    attempt.score = percent
-    attempt.answers = {qid: list(chosen_map.get(qid, set())) for qid in presented_ids}
-    attempt.save()
+    # Finalise attempt if not already done
+    if not attempt.completed_at:
+        attempt.score = percent
+        attempt.passed = passed
+        attempt.completed_at = timezone.now()
+        attempt.save(update_fields=["score", "passed", "completed_at"])
+        # XP is still awarded by your existing post_save signal on ModuleAttempt
 
     return response.Response(
         {
@@ -1071,3 +1621,52 @@ def submit_started_attempt(request, attempt_id: str):
         },
         status=status.HTTP_200_OK,
     )
+
+@extend_schema(responses=ManagerDashboardSerializer)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([IsManagerForWrites])
+def manager_dashboard(request):
+    """
+    Simple org-level dashboard for managers/admins.
+    Shows high-level training and XP stats for the current org.
+    """
+    user = request.user
+    org_id = getattr(user, "org_id", None)
+
+    users_qs = User.objects.all()
+    modules_qs = Module.objects.all()
+    attempts_qs = ModuleAttempt.objects.all()
+    xp_qs = XPEvent.objects.all()
+
+    if org_id:
+        users_qs = users_qs.filter(org_id=org_id)
+        modules_qs = modules_qs.filter(org_id=org_id)
+        attempts_qs = attempts_qs.filter(module__org_id=org_id)
+        xp_qs = xp_qs.filter(org_id=org_id)
+
+    now = timezone.now()
+    since_30 = now - timedelta(days=30)
+
+    total_users = users_qs.count()
+    active_modules = modules_qs.filter(active=True).count()
+    total_attempts = attempts_qs.count()
+    pass_count = attempts_qs.filter(passed=True).count()
+    pass_rate = float(round(pass_count * 100.0 / total_attempts, 1)) if total_attempts else 0.0
+    attempts_last_30 = attempts_qs.filter(created_at__gte=since_30).count()
+    total_xp = xp_qs.aggregate(s=Sum("amount"))["s"] or 0
+    avg_score_all = attempts_qs.aggregate(avg=Avg("score"))["avg"] or 0.0
+    avg_score_all = float(round(avg_score_all, 1))
+
+    payload = {
+        "total_users": total_users,
+        "active_modules": active_modules,
+        "total_attempts": total_attempts,
+        "pass_count": pass_count,
+        "pass_rate": pass_rate,
+        "attempts_last_30_days": attempts_last_30,
+        "total_xp": int(total_xp),
+        "avg_score": avg_score_all,
+    }
+
+    ser = ManagerDashboardSerializer(payload)
+    return response.Response(ser.data)

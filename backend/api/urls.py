@@ -17,6 +17,11 @@ from .views import (
     SkillViewSet,
     SOPViewSet,
     StartModuleAttemptView,
+    manager_dashboard,
+    start_module_attempt,
+    submit_started_attempt,   # now per-question
+    next_question,
+    finish_attempt,
     TrainingPathwayViewSet,
     MyTrainingPathwaysView,
     MyModuleAttemptsView,
@@ -81,8 +86,12 @@ urlpatterns = [
     path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),  # media viewed heartbeat/complete
     # Start → Submit quiz flow (randomised/shuffled/negative marking)
     path("modules/<uuid:module_id>/start/", start_module_attempt),  # returns attempt_id + served questions
+    path("modules/<uuid:module_id>/attempt/start/", start_module_attempt, name="start-module-attempt"),
+    path("attempts/<uuid:attempt_id>/next/", next_question, name="next-question"),
+    path("attempts/<uuid:attempt_id>/submit/", submit_started_attempt, name="submit-question"),
+    path("attempts/<uuid:attempt_id>/finish/", finish_attempt, name="finish-attempt"),
+    path("manager/dashboard/", manager_dashboard, name="manager-dashboard"),
     path("me/module-attempts/", MyModuleAttemptsView.as_view(), name="my-module-attempts"),
-    path("attempts/<uuid:attempt_id>/submit/", submit_started_attempt),
     # Simple org leaderboard
     path("leaderboard/", leaderboard),
     # --- Optional extras (uncomment if you added these views) ---

@@ -275,11 +275,18 @@ async function startModule (mod) {
           </div>
 
           <div class="flex gap-2 justify-end">
+
             <NuxtLink
               :to="`/modules/${m.id}`"
               class="px-3 py-1.5 text-xs rounded border border-gray-300 bg-white hover:bg-gray-50"
             >
               View details
+            </NuxtLink>
+            <NuxtLink
+              :to="`/modules/${m.id}/stats`"
+              class="text-xs text-emerald-700 hover:underline"
+            >
+              View stats
             </NuxtLink>
             <button
               type="button"

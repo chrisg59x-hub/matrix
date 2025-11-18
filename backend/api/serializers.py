@@ -194,6 +194,36 @@ class ModuleAttemptSerializer(serializers.ModelSerializer):
             "passed",
         ]
 
+class ReviewChoiceSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    text = serializers.CharField()
+    is_correct = serializers.BooleanField()
+
+
+class AttemptReviewQuestionSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    text = serializers.CharField()
+    qtype = serializers.CharField()
+    points = serializers.FloatField()
+    explanation = serializers.CharField(allow_blank=True)
+    choices = ReviewChoiceSerializer(many=True)
+    selected_choice_ids = serializers.ListField(child=serializers.UUIDField())
+    correct = serializers.BooleanField()
+    earned = serializers.FloatField()
+    max_points = serializers.FloatField()
+
+
+class AttemptReviewSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    module_id = serializers.UUIDField()
+    module_title = serializers.CharField()
+    user_id = serializers.UUIDField()
+    username = serializers.CharField()
+    score = serializers.IntegerField()
+    passed = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    completed_at = serializers.DateTimeField(allow_null=True)
+    questions = AttemptReviewQuestionSerializer(many=True)
 
 class XPEventSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
@@ -290,7 +320,16 @@ class LevelDefSerializer(serializers.ModelSerializer):
         model = LevelDef
         fields = "__all__"
 
-
+class ManagerDashboardSerializer(serializers.Serializer):
+    total_users = serializers.IntegerField()
+    active_modules = serializers.IntegerField()
+    total_attempts = serializers.IntegerField()
+    pass_count = serializers.IntegerField()
+    pass_rate = serializers.FloatField()
+    attempts_last_30_days = serializers.IntegerField()
+    total_xp = serializers.IntegerField()
+    avg_score = serializers.FloatField()
+    
 class BadgeSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
     team_name = serializers.CharField(source="team.name", read_only=True)
@@ -406,6 +445,7 @@ class ModuleSerializer(serializers.ModelSerializer):
             "shuffle_questions",
             "shuffle_choices",
             "negative_marking",
+            "feedback_mode", 
             # new fields from the annotation:
             "due_at",
             "due_date",
@@ -483,3 +523,45 @@ class SubmitAnswerSerializer(serializers.Serializer):
 
 class SubmitAttemptRequestSerializer(serializers.Serializer):
     answers = SubmitAnswerSerializer(many=True)
+
+class NextQuestionSerializer(serializers.Serializer):
+    """Response for 'next question' flow."""
+    attempt_id = serializers.UUIDField()
+    question = QuestionPublicSerializer(allow_null=True)  # null if no questions left
+    remaining = serializers.IntegerField()
+    total = serializers.IntegerField()
+
+
+class SingleAnswerRequestSerializer(serializers.Serializer):
+    """Request payload for per-question submit."""
+    question_id = serializers.UUIDField()
+    choice_ids = serializers.ListField(child=serializers.UUIDField())
+    time_taken = serializers.FloatField(required=False)
+
+
+class SingleAnswerResponseSerializer(serializers.Serializer):
+    """
+    Response payload for per-question submit.
+    Some fields may be suppressed depending on feedback_mode.
+    """
+    attempt_id = serializers.UUIDField()
+    question_id = serializers.UUIDField()
+    completed = serializers.BooleanField()
+    remaining = serializers.IntegerField()
+
+    # Feedback fields (may be omitted based on feedback_mode)
+    correct = serializers.BooleanField(required=False)
+    earned = serializers.FloatField(required=False)
+    max_points = serializers.FloatField(required=False)
+    message = serializers.CharField(required=False, allow_blank=True)
+
+class ModuleStatsSerializer(serializers.Serializer):
+    module_id = serializers.UUIDField()
+    title = serializers.CharField()
+    total_attempts = serializers.IntegerField()
+    unique_users = serializers.IntegerField()
+    pass_count = serializers.IntegerField()
+    pass_rate = serializers.FloatField()
+    avg_score = serializers.FloatField()
+    last_attempt = serializers.DateTimeField(allow_null=True)
+    last_pass = serializers.DateTimeField(allow_null=True)
