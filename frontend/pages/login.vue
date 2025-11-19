@@ -4,7 +4,7 @@ const username = ref('employee')
 const password = ref('employee123')
 async function submit() {
   await login(username.value, password.value)
-  return navigateTo('/dashboard')
+  return navigateTo('/')
 }
 </script>
 

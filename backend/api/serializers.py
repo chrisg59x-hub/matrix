@@ -239,6 +239,9 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source="user.username", read_only=True)
     supervisor_name = serializers.CharField(source="supervisor.username", read_only=True)
 
+    # NEW: supervisor is set server-side in perform_create, so don't require it in input
+    supervisor = serializers.PrimaryKeyRelatedField(read_only=True)
+
     class Meta:
         model = SupervisorSignoff
         fields = (
@@ -252,7 +255,14 @@ class SupervisorSignoffSerializer(serializers.ModelSerializer):
             "note",
             "created_at",
         )
-
+        read_only_fields = (
+            "id",
+            "supervisor",
+            "user_name",
+            "skill_name",
+            "supervisor_name",
+            "created_at",
+        )
 
 class RecertRequirementSerializer(serializers.ModelSerializer):
     skill_name = serializers.CharField(source="skill.name", read_only=True)
@@ -428,6 +438,32 @@ class QuestionPublicSerializer(serializers.ModelSerializer):
     class Meta:
         model = Question
         fields = ("id", "qtype", "text", "points", "choices")
+
+class ChoiceReviewSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    text = serializers.CharField()
+    is_correct = serializers.BooleanField()
+    selected = serializers.BooleanField()
+
+
+class QuestionReviewSerializer(serializers.Serializer):
+    id = serializers.UUIDField()
+    text = serializers.CharField()
+    qtype = serializers.CharField()
+    points = serializers.FloatField()
+    explanation = serializers.CharField(allow_blank=True)
+    choices = ChoiceReviewSerializer(many=True)
+
+
+class AttemptReviewSerializer(serializers.Serializer):
+    attempt_id = serializers.UUIDField()
+    module_id = serializers.UUIDField()
+    module_title = serializers.CharField()
+    score_percent = serializers.IntegerField()
+    passed = serializers.BooleanField()
+    created_at = serializers.DateTimeField()
+    completed_at = serializers.DateTimeField(allow_null=True)
+    questions = QuestionReviewSerializer(many=True)
 
 
 class ModuleSerializer(serializers.ModelSerializer):

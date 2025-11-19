@@ -16,9 +16,9 @@
             >
               <span v-if="link.icon" :class="link.icon"></span>
 
-              <!-- Label + optional overdue badge -->
               <span class="flex items-center gap-2">
                 <span>{{ link.label }}</span>
+                <!-- Overdue badge on 'My Overdue Training' -->
                 <span
                   v-if="link.to === '/training/overdue' && overdueCount > 0"
                   class="inline-flex items-center justify-center rounded-full bg-red-500 text-white text-[11px] px-1.5 min-w-[1.25rem]"
@@ -26,6 +26,30 @@
                   {{ overdueCount }}
                 </span>
               </span>
+            </NuxtLink>
+          </li>
+
+          <div class="mt-4 border-t pt-3 text-xs font-semibold px-2 text-gray-500">
+            Me
+          </div>
+
+          <li>
+            <NuxtLink
+              to="/me/progress"
+              :class="linkClasses('/me/progress')"
+            >
+              <span class="i-lucide-gauge"></span>
+              <span>My progress</span>
+            </NuxtLink>
+          </li>
+
+          <li>
+            <NuxtLink
+              to="/me/attempts"
+              :class="linkClasses('/me/attempts')"
+            >
+              <span class="i-lucide-history"></span>
+              <span>My attempts</span>
             </NuxtLink>
           </li>
 
@@ -40,6 +64,34 @@
             >
               <span v-if="link.icon" :class="link.icon"></span>
               <span>{{ link.label }}</span>
+            </NuxtLink>
+          </li>
+
+          <!-- Manager-only section -->
+          <div
+            v-if="isManager"
+            class="mt-4 border-t pt-3 text-xs font-semibold px-2 text-gray-500"
+          >
+            Manager
+          </div>
+
+          <li v-if="isManager">
+            <NuxtLink
+              to="/manager/dashboard"
+              :class="linkClasses('/manager/dashboard')"
+            >
+              <span class="i-lucide-clipboard-list"></span>
+              <span>Manager dashboard</span>
+            </NuxtLink>
+          </li>
+
+          <li v-if="isManager">
+            <NuxtLink
+              to="/manager/signoffs"
+              :class="linkClasses('/manager/signoffs')"
+            >
+              <span class="i-lucide-check-circle-2"></span>
+              <span>Supervisor sign-offs</span>
             </NuxtLink>
           </li>
 
@@ -106,7 +158,6 @@
               >
                 <span v-if="link.icon" :class="link.icon"></span>
 
-                <!-- Label + optional overdue badge (mobile) -->
                 <span class="flex items-center gap-2">
                   <span>{{ link.label }}</span>
                   <span
@@ -116,6 +167,32 @@
                     {{ overdueCount }}
                   </span>
                 </span>
+              </NuxtLink>
+            </li>
+
+            <div class="mt-4 border-t pt-3 text-xs font-semibold px-2 text-gray-500">
+              Me
+            </div>
+
+            <li>
+              <NuxtLink
+                to="/me/progress"
+                :class="linkClasses('/me/progress')"
+                @click="mobileMenu = false"
+              >
+                <span class="i-lucide-gauge"></span>
+                <span>My progress</span>
+              </NuxtLink>
+            </li>
+
+            <li>
+              <NuxtLink
+                to="/me/attempts"
+                :class="linkClasses('/me/attempts')"
+                @click="mobileMenu = false"
+              >
+                <span class="i-lucide-history"></span>
+                <span>My attempts</span>
               </NuxtLink>
             </li>
 
@@ -131,6 +208,35 @@
               >
                 <span v-if="link.icon" :class="link.icon"></span>
                 <span>{{ link.label }}</span>
+              </NuxtLink>
+            </li>
+
+            <div
+              v-if="isManager"
+              class="mt-4 border-t pt-3 text-xs font-semibold px-2 text-gray-500"
+            >
+              Manager
+            </div>
+
+            <li v-if="isManager">
+              <NuxtLink
+                to="/manager/dashboard"
+                :class="linkClasses('/manager/dashboard')"
+                @click="mobileMenu = false"
+              >
+                <span class="i-lucide-clipboard-list"></span>
+                <span>Manager dashboard</span>
+              </NuxtLink>
+            </li>
+
+            <li v-if="isManager">
+              <NuxtLink
+                to="/manager/signoffs"
+                :class="linkClasses('/manager/signoffs')"
+                @click="mobileMenu = false"
+              >
+                <span class="i-lucide-check-circle-2"></span>
+                <span>Supervisor sign-offs</span>
               </NuxtLink>
             </li>
 
@@ -171,8 +277,29 @@
       </aside>
     </transition>
 
-    <!-- MAIN CONTENT AREA: just the page content -->
+    <!-- MAIN CONTENT AREA -->
     <div class="flex-1 flex flex-col min-h-screen">
+      <!-- TOP BAR -->
+      <header class="h-14 bg-white border-b shadow-sm flex items-center px-4">
+        <button
+          class="md:hidden p-2 mr-2"
+          @click="mobileMenu = true"
+        >
+          <span class="i-lucide-menu text-xl"></span>
+        </button>
+
+        <h1 class="font-medium text-lg">
+          {{ pageTitle }}
+        </h1>
+
+        <div class="ml-auto flex items-center gap-3">
+          <span class="text-sm text-gray-600">
+            {{ auth.user?.username }}
+          </span>
+        </div>
+      </header>
+
+      <!-- ROUTED PAGE CONTENT -->
       <main class="flex-1 p-4">
         <slot />
       </main>
@@ -185,13 +312,24 @@ const auth = useAuth()
 const route = useRoute()
 const mobileMenu = ref(false)
 
-// overdue count for My Overdue Training
+// Overdue count for My Overdue Training
 const overdueCount = ref(0)
+
+const isManager = computed(() => {
+  const role = auth.user?.biz_role || ''
+  return role === 'manager' || role === 'admin'
+})
 
 const mainLinks = [
   { to: '/', label: 'Dashboard', icon: 'i-lucide-home' },
   { to: '/sops', label: 'SOPs', icon: 'i-lucide-file-text' },
   { to: '/training/overdue', label: 'My Overdue Training', icon: 'i-lucide-alarm-clock' },
+
+  // NEW “Me” links
+  { to: '/me/progress', label: 'My Progress', icon: 'i-lucide-gauge' },
+  { to: '/me/attempts', label: 'My Attempts', icon: 'i-lucide-clipboard-list' },
+  { to: '/me/badges', label: 'My Badges', icon: 'i-lucide-award' },
+
   { to: '/modules', label: 'Modules', icon: 'i-lucide-book-open' },
   { to: '/skills', label: 'Skills', icon: 'i-lucide-badge-check' },
   { to: '/roles', label: 'Job Roles', icon: 'i-lucide-users' },
@@ -208,7 +346,30 @@ const systemLinks = [
   { to: '/settings', label: 'Settings', icon: 'i-lucide-settings' },
 ]
 
-function linkClasses(path) {
+const pageTitle = computed(() => {
+  const map = {
+    '/': 'Dashboard',
+    '/sops': 'SOPs',
+    '/training/overdue': 'My Overdue Training',
+
+    '/me/progress': 'My Progress',
+    '/me/attempts': 'My Attempts',
+    '/me/badges': 'My Badges',
+
+    '/modules': 'Modules',
+    '/skills': 'Skills',
+    '/roles': 'Roles',
+    '/leaderboard': 'Leaderboards',
+    '/users': 'Users',
+    '/teams': 'Teams',
+    '/departments': 'Departments',
+    '/settings': 'Settings',
+    '/login': 'Login',
+  }
+  return map[route.path] || 'Matrix'
+})
+
+function linkClasses (path) {
   const isActive =
     route.path === path ||
     (path !== '/' && route.path.startsWith(path + '/'))
@@ -221,13 +382,13 @@ function linkClasses(path) {
   ]
 }
 
-function logout() {
+function logout () {
   auth.logout?.()
   navigateTo('/login')
 }
 
 // Fetch overdue count whenever user is logged in / changes
-async function refreshOverdueCount() {
+async function refreshOverdueCount () {
   try {
     if (!auth.loggedIn) {
       overdueCount.value = 0
@@ -237,7 +398,7 @@ async function refreshOverdueCount() {
     const data = await get('/me/overdue-sops/')
     const list = Array.isArray(data) ? data : (data.results || [])
     overdueCount.value = list.length
-  } catch (e) {
+  } catch {
     overdueCount.value = 0
   }
 }

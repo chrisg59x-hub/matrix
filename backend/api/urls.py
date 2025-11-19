@@ -16,9 +16,11 @@ from .views import (
     RoleSkillViewSet,
     SkillViewSet,
     SOPViewSet,
+    attempt_review,
     StartModuleAttemptView,
     manager_dashboard,
     my_dashboard,
+    my_badges,
     start_module_attempt,
     submit_started_attempt,   # now per-question
     next_question,
@@ -75,6 +77,7 @@ urlpatterns = [
     path("", include(router.urls)),
     # --- Core function endpoints ---
     path("my-progress/", my_progress, name="my-progress"),
+    path("my_progress/", my_progress, name="my-progress-underscore"),
     path("me/whoami/", whoami, name="whoami"),  # username + role (used by Swagger banner)
     path("me/sop-views/", my_sop_views),
     path(
@@ -83,7 +86,7 @@ urlpatterns = [
         name="me-overdue-sops",
     ),
     path("me/training-pathways/", MyTrainingPathwaysView.as_view(), name="my-training-pathways"),
-    path("", include(router.urls)),
+    path("me/badges/", my_badges, name="my-badges"),
     path("sops/<uuid:sop_id>/view/", sop_view_heartbeat),  # media viewed heartbeat/complete
     # Start → Submit quiz flow (randomised/shuffled/negative marking)
     path("modules/<uuid:module_id>/start/", start_module_attempt),  # returns attempt_id + served questions
@@ -91,6 +94,7 @@ urlpatterns = [
     path("attempts/<uuid:attempt_id>/next/", next_question, name="next-question"),
     path("attempts/<uuid:attempt_id>/submit/", submit_started_attempt, name="submit-question"),
     path("attempts/<uuid:attempt_id>/finish/", finish_attempt, name="finish-attempt"),
+    path("attempts/<uuid:attempt_id>/review/", attempt_review, name="attempt-review"),
     path("manager/dashboard/", manager_dashboard, name="manager-dashboard"),
     path("me/dashboard/", my_dashboard, name="my-dashboard"),
     path("me/module-attempts/", MyModuleAttemptsView.as_view(), name="my-module-attempts"),
@@ -103,5 +107,5 @@ urlpatterns = [
     # Extra leaderboards:
     path("leaderboard/skill/<uuid:skill_id>/", skill_leaderboard),
     path("leaderboard/role/<uuid:role_id>/", role_leaderboard),
-    path("leaderboard/group/", org_leaderboard_by_group),   # department/team scoped
+    path("leaderboard/group/", org_leaderboard_by_group, name="org-leaderboard-by-group"),   # department/team scoped
 ]

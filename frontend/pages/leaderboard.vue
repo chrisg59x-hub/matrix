@@ -8,6 +8,12 @@
           XP & Levels for your organisation. Filter by skill or role, and export CSVs.
         </p>
       </div>
+      <NuxtLink
+          to="/leaderboard/groups"
+          class="px-3 py-1.5 text-sm rounded border border-gray-300 hover:bg-gray-100"
+        >
+          Teams &amp; departments leaderboard
+        </NuxtLink>
 
       <div class="flex flex-wrap gap-2">
         <button

@@ -1,225 +1,266 @@
-<!-- frontend/pages/sops/[id].vue -->
+<script setup lang="ts">
+const route = useRoute()
+const router = useRouter()
+const { get, post } = useApi()
+
+const sopId = computed(() => String(route.params.id || ''))
+
+type Sop = {
+  id: string
+  title?: string | null
+  code?: string | null
+  description?: string | null
+  media_url?: string | null
+  // other fields may exist on the model, but we don't rely on them
+  created_at?: string | null
+}
+
+type SopView = {
+  id: number
+  sop: string
+  seconds_viewed: number
+  pages_viewed: number
+  progress: number
+  completed: boolean
+  last_heartbeat?: string | null
+}
+
+const loading = ref(true)
+const err = ref<string | null>(null)
+
+const sop = ref<Sop | null>(null)
+const view = ref<SopView | null>(null)
+const markingComplete = ref(false)
+
+onMounted(load)
+
+async function load () {
+  if (!sopId.value) {
+    err.value = 'No SOP id provided in route.'
+    return
+  }
+
+  loading.value = true
+  err.value = null
+  sop.value = null
+  view.value = null
+
+  try {
+    // 1) Load the SOP itself
+    const sopData: any = await get(`/sops/${sopId.value}/`)
+    sop.value = sopData
+
+    // 2) Try to find any existing SOPView for this SOP
+    //    (we use /me/sop-views/ and filter client-side)
+    const allViews: any = await get('/me/sop-views/')
+    const list = Array.isArray(allViews) ? allViews : (allViews.results || [])
+    const existing = list.find((v: any) => v.sop === sopId.value)
+    if (existing) {
+      view.value = existing
+    }
+  } catch (e: any) {
+    err.value = e?.data
+      ? JSON.stringify(e.data)
+      : (e?.message || 'Failed to load SOP')
+  } finally {
+    loading.value = false
+  }
+}
+
+const mediaUrl = computed(() => sop.value?.media_url || '')
+
+const isVideo = computed(() => {
+  if (!mediaUrl.value) return false
+  const lower = mediaUrl.value.toLowerCase()
+  return lower.endsWith('.mp4') || lower.endsWith('.webm') || lower.endsWith('.mov')
+})
+
+const isPdf = computed(() => {
+  if (!mediaUrl.value) return false
+  return mediaUrl.value.toLowerCase().endsWith('.pdf')
+})
+
+const isCompleted = computed(() => !!view.value?.completed)
+
+function createdLabel (value?: string | null) {
+  if (!value) return ''
+  const d = new Date(value)
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleDateString()
+}
+
+async function markAsViewed () {
+  if (!sopId.value) return
+  markingComplete.value = true
+  err.value = null
+
+  try {
+    const payload = {
+      completed: true,
+      progress: 1,
+    }
+    const data: any = await post(`/sops/${sopId.value}/view/`, payload)
+    // Heartbeat returns the SOPView record, update local state
+    view.value = data
+  } catch (e: any) {
+    err.value = e?.data
+      ? JSON.stringify(e.data)
+      : (e?.message || 'Failed to mark SOP as viewed')
+  } finally {
+    markingComplete.value = false
+  }
+}
+
+function goBack () {
+  // Simple back behaviour; fallback to /sops
+  if (window.history.length > 1) window.history.back()
+  else router.push('/sops')
+}
+</script>
+
 <template>
-  <div class="p-4 space-y-4">
+  <div class="max-w-5xl mx-auto space-y-6">
     <!-- Header -->
-    <div class="flex flex-wrap items-center justify-between gap-3">
+    <header class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
       <div>
-        <h1 class="text-2xl font-bold text-slate-900">
-          {{ sop?.title || 'Loading SOP…' }}
+        <h1 class="text-2xl font-bold">
+          {{ sop?.title || 'SOP' }}
         </h1>
-        <p v-if="sop" class="text-sm text-slate-500">
-          Code: <span class="font-mono">{{ sop.code }}</span>
-          · v{{ sop.version_major }}.{{ sop.version_minor }}
-        </p>
-        <p v-if="sop" class="text-xs text-slate-400">
-          Status: {{ sop.status }} · Media: {{ sop.media_type }}
+        <p class="text-sm text-gray-600">
+          Standard operating procedure details and training media.
         </p>
       </div>
 
-      <div class="flex items-center gap-2">
+      <div class="flex flex-wrap gap-2">
         <button
-          v-if="!completed"
-          class="inline-flex items-center rounded-lg bg-emerald-600 px-3 py-1.5 text-xs font-medium text-white shadow-sm hover:bg-emerald-700 disabled:opacity-60"
-          :disabled="!sop"
-          @click="markCompleted"
+          type="button"
+          class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+          @click="goBack"
         >
-          ✓ Mark as completed
+          Back
         </button>
+
+        <button
+          v-if="!isCompleted"
+          type="button"
+          class="px-3 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+          :disabled="markingComplete"
+          @click="markAsViewed"
+        >
+          <span v-if="!markingComplete">Mark as viewed</span>
+          <span v-else>Saving…</span>
+        </button>
+
         <span
           v-else
-          class="inline-flex items-center rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-700"
+          class="inline-flex items-center px-3 py-1.5 text-xs rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200"
         >
-          ✓ Completed
+          ✅ SOP viewed and recorded
         </span>
       </div>
+    </header>
+
+    <div v-if="loading" class="p-4 rounded bg-gray-100 text-sm">
+      Loading SOP…
     </div>
 
-    <!-- Error banner -->
     <div
-      v-if="error"
-      class="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700"
+      v-else-if="err"
+      class="p-3 rounded bg-red-100 text-sm text-red-800 whitespace-pre-wrap"
     >
-      {{ error }}
+      {{ err }}
     </div>
 
-    <!-- Media viewer -->
-    <div
-      v-if="sop"
-      class="overflow-hidden rounded-xl border border-slate-200 bg-slate-50"
-    >
-      <!-- Video -->
-      <template v-if="sop.media_type === 'video' && sop.media_file">
-        <video
-          ref="videoEl"
-          controls
-          class="block h-[70vh] w-full bg-black"
-          @play="onVideoPlay"
-          @pause="onVideoPause"
-        >
-          <source :src="sop.media_file" />
-          Your browser does not support the video tag.
-        </video>
-      </template>
+    <div v-else-if="sop" class="space-y-6">
+      <!-- Meta / description -->
+      <section class="bg-white rounded-xl shadow-sm border p-4 space-y-2">
+        <div class="flex flex-wrap gap-3 text-sm text-gray-600">
+          <div v-if="sop.code">
+            <span class="font-semibold">Code:</span>
+            <span class="ml-1">{{ sop.code }}</span>
+          </div>
+          <div v-if="sop.created_at">
+            <span class="font-semibold">Created:</span>
+            <span class="ml-1">{{ createdLabel(sop.created_at) }}</span>
+          </div>
+          <div v-if="view">
+            <span class="font-semibold">Progress:</span>
+            <span class="ml-1">
+              {{ Math.round((view.progress || 0) * 100) }}%
+              <span v-if="view.completed">(completed)</span>
+            </span>
+          </div>
+        </div>
 
-      <!-- PDF / PPTX -->
-      <template
-        v-else-if="(sop.media_type === 'pdf' || sop.media_type === 'pptx') && sop.media_file"
-      >
-        <iframe
-          :src="sop.media_file"
-          class="h-[75vh] w-full bg-white"
-        />
-      </template>
+        <p v-if="sop.description" class="text-sm text-gray-700 whitespace-pre-line">
+          {{ sop.description }}
+        </p>
+      </section>
 
-      <!-- External link -->
-      <template v-else-if="sop.media_type === 'link' && sop.external_url">
-        <div class="p-4">
-          <p class="mb-2 text-sm text-slate-700">
-            This SOP links to an external resource:
-          </p>
-          <a
-            :href="sop.external_url"
-            target="_blank"
-            rel="noopener noreferrer"
-            class="inline-flex items-center gap-1 text-sm font-medium text-emerald-700 underline hover:text-emerald-800"
+      <!-- Media viewer -->
+      <section class="bg-white rounded-xl shadow-sm border p-4 space-y-3">
+        <h2 class="text-sm font-semibold text-gray-800">
+          Training media
+        </h2>
+
+        <div v-if="!mediaUrl" class="text-sm text-gray-500">
+          No media file is attached to this SOP yet.
+        </div>
+
+        <div v-else class="space-y-3">
+          <!-- Basic heuristic: video vs pdf vs generic link -->
+          <div v-if="isVideo" class="rounded overflow-hidden bg-black/5">
+            <video
+              :src="mediaUrl"
+              controls
+              class="w-full max-h-[480px] bg-black"
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+
+          <div
+            v-else-if="isPdf"
+            class="border rounded overflow-hidden"
           >
-            Open SOP in new tab
-            <span aria-hidden="true">↗</span>
-          </a>
-        </div>
-      </template>
+            <iframe
+              :src="mediaUrl"
+              class="w-full h-[480px]"
+            >
+              This browser cannot display embedded PDFs.
+            </iframe>
+          </div>
 
-      <!-- No media -->
-      <template v-else>
-        <div class="p-4 text-sm text-slate-600">
-          No media attached for this SOP yet.
-        </div>
-      </template>
-    </div>
+          <div v-else class="text-sm text-gray-700 space-y-2">
+            <p>
+              This SOP has associated media. Click below to open it in a new tab.
+            </p>
+            <a
+              :href="mediaUrl"
+              target="_blank"
+              rel="noopener noreferrer"
+              class="inline-flex items-center px-3 py-1.5 rounded bg-emerald-600 text-white hover:bg-emerald-700"
+            >
+              Open training media
+            </a>
+          </div>
 
-    <!-- Tracking footer -->
-    <div
-      v-if="view"
-      class="text-xs text-slate-400"
-    >
-      Tracked:
-      {{ view.seconds_viewed || 0 }}s ·
-      pages: {{ view.pages_viewed || 0 }} ·
-      progress: {{ Math.round((view.progress || 0) * 100) }}%
+          <p class="text-xs text-gray-500">
+            Once you’ve finished watching or reading the SOP, click
+            <b>“Mark as viewed”</b> above to record completion and unlock related quizzes.
+          </p>
+        </div>
+      </section>
+
+      <!-- Debug: current view record -->
+      <section v-if="view" class="space-y-1 text-[10px] text-gray-500">
+        <div class="font-semibold">
+          SOP view record (debug)
+        </div>
+        <pre class="bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto max-h-64">
+{{ JSON.stringify(view, null, 2) }}
+        </pre>
+      </section>
     </div>
   </div>
 </template>
-
-<script setup lang="ts">
-import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
-import { useRoute } from '#imports'
-import { useApi } from '~/composables/useApi'
-
-const route = useRoute()
-const api = useApi()
-
-const sop = ref<any | null>(null)
-const view = ref<any | null>(null)
-const error = ref<string | null>(null)
-const completed = ref(false)
-
-const videoEl = ref<HTMLVideoElement | null>(null)
-const lastHeartbeatAt = ref<number | null>(null)
-const lastVideoTime = ref(0)
-let heartbeatTimer: any = null
-
-const sopId = computed(() => route.params.id as string)
-
-/**
- * Load SOP details from /api/sops/:id/
- */
-async function loadSop() {
-  try {
-    error.value = null
-    sop.value = await api.get(`/sops/${sopId.value}/`)
-  } catch (e: any) {
-    error.value = e?.message || 'Failed to load SOP'
-  }
-}
-
-/**
- * Send heartbeat to /api/sops/:id/view/
- * - optionally marks completed
- * - includes seconds delta if we can infer from video time
- */
-async function sendHeartbeat(options: { completedFlag?: boolean } = {}) {
-  if (!sop.value) return
-
-  const { completedFlag = false } = options
-
-  try {
-    const now = Date.now()
-    let secondsDelta = 0
-
-    if (videoEl.value) {
-      const current = Math.floor(videoEl.value.currentTime || 0)
-      secondsDelta = Math.max(0, current - lastVideoTime.value)
-      lastVideoTime.value = current
-    } else if (lastHeartbeatAt.value) {
-      secondsDelta = Math.round((now - lastHeartbeatAt.value) / 1000)
-    }
-    lastHeartbeatAt.value = now
-
-    const body: any = {}
-    if (secondsDelta > 0) body.seconds_viewed = secondsDelta
-    if (completedFlag) body.completed = true
-
-    if (videoEl.value && sop.value?.duration_seconds) {
-      const progress =
-        (videoEl.value.currentTime || 0) / sop.value.duration_seconds
-      body.progress = Math.max(0, Math.min(1, progress))
-    }
-
-    if (Object.keys(body).length === 0) return
-
-    view.value = await api.post(`/sops/${sopId.value}/view/`, body)
-    if (view.value?.completed) {
-      completed.value = true
-    }
-  } catch {
-    // best-effort; don’t block the UI if tracking fails
-  }
-}
-
-function startHeartbeat() {
-  stopHeartbeat()
-  lastHeartbeatAt.value = Date.now()
-  heartbeatTimer = setInterval(() => {
-    void sendHeartbeat()
-  }, 15000) // every 15s
-}
-
-function stopHeartbeat() {
-  if (heartbeatTimer) {
-    clearInterval(heartbeatTimer)
-    heartbeatTimer = null
-  }
-}
-
-async function markCompleted() {
-  await sendHeartbeat({ completedFlag: true })
-}
-
-function onVideoPlay() {
-  startHeartbeat()
-}
-
-function onVideoPause() {
-  void sendHeartbeat()
-}
-
-onMounted(async () => {
-  await loadSop()
-  startHeartbeat()
-})
-
-onBeforeUnmount(() => {
-  stopHeartbeat()
-  void sendHeartbeat()
-})
-</script>

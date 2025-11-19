@@ -65,6 +65,7 @@ from .serializers import (
     OrgSerializer,
     ProgressSerializer,
     QuestionPublicSerializer,
+    AttemptReviewSerializer,
     RecertRequirementSerializer,
     RoleAssignmentSerializer,
     RoleSkillSerializer,
@@ -341,128 +342,78 @@ class ModuleAttemptViewSet(viewsets.ModelViewSet):
     serializer_class = ModuleAttemptSerializer
     permission_classes = [permissions.IsAuthenticated]
 
-    @action(detail=True, methods=["get"])
-    def review(self, request, pk=None):
-        """
-        Detailed review for a single attempt, including per-question correctness
-        and points. Uses ModuleAttemptQuestion where available, falls back to
-        recomputing from attempt.answers for legacy attempts.
-        """
-        attempt = self.get_object()
-        user = request.user
+@extend_schema(responses=AttemptReviewSerializer)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def review(request, attempt_id: str):
+    """
+    Read-only review of a completed attempt.
 
-        # Permission: owner OR manager/admin
-        if attempt.user_id != user.id and getattr(user, "biz_role", "") not in ("manager", "admin"):
-            raise PermissionDenied("You can only review your own attempts.")
+    Returns the module, overall score/pass flag, and a list of questions
+    with choices, showing which ones were selected and which are correct.
+    """
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id,
+            user=request.user,
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
 
-        module = attempt.module
+    module = attempt.module
 
-        questions_data = []
+    # Normalise answers so keys + choice IDs are strings
+    # attempt.answers is stored as {question_id: [choice_ids]}
+    raw_answers = attempt.answers or {}
+    answers_by_qid: dict[str, list[str]] = {}
+    for qid, choice_ids in raw_answers.items():
+        qid_str = str(qid)
+        answers_by_qid[qid_str] = [str(cid) for cid in (choice_ids or [])]
 
-        # Prefer detailed rows from ModuleAttemptQuestion if present
-        if attempt.attempt_questions.exists():
-            aqs = (
-                attempt.attempt_questions
-                .select_related("question")
-                .prefetch_related("question__choices")
+    # Load all questions + choices for this module
+    questions = list(module.questions.prefetch_related("choices").all())
+
+    review_questions = []
+    for q in questions:
+        qid_str = str(q.id)
+        selected_ids = set(answers_by_qid.get(qid_str, []))
+
+        choice_payload = []
+        for c in q.choices.all():
+            cid_str = str(c.id)
+            choice_payload.append(
+                {
+                    "id": c.id,
+                    "text": c.text,
+                    "is_correct": c.is_correct,
+                    "selected": cid_str in selected_ids,
+                }
             )
 
-            for aq in aqs.order_by("question__order", "question__id"):
-                q = aq.question
-                choices = list(q.choices.all())
-                questions_data.append(
-                    {
-                        "id": q.id,
-                        "text": q.text,
-                        "qtype": q.qtype,
-                        "points": float(q.points),
-                        "explanation": q.explanation or "",
-                        "choices": [
-                            {
-                                "id": c.id,
-                                "text": c.text,
-                                "is_correct": c.is_correct,
-                            }
-                            for c in choices
-                        ],
-                        "selected_choice_ids": aq.final_choices or [],
-                        "correct": aq.correct,
-                        "earned": float(aq.points_awarded),
-                        "max_points": float(q.points),
-                    }
-                )
-        else:
-            # Fallback: derive per-question breakdown from attempt.answers
-            answers = attempt.answers or {}
-            qs = module.questions.prefetch_related("choices").all()
+        review_questions.append(
+            {
+                "id": q.id,
+                "text": q.text,
+                "qtype": q.qtype,
+                "points": float(q.points),
+                "explanation": q.explanation or "",
+                "choices": choice_payload,
+            }
+        )
 
-            for q in qs:
-                qid = str(q.id)
-                selected_ids = [str(x) for x in answers.get(qid, [])]
+    payload = {
+        "attempt_id": str(attempt.id),
+        "module_id": str(module.id),
+        "module_title": module.title,
+        "score_percent": attempt.score,
+        "passed": attempt.passed,
+        "created_at": attempt.created_at,
+        "completed_at": attempt.completed_at,
+        "questions": review_questions,
+    }
 
-                choices = list(q.choices.all())
-                correct_ids = {str(c.id) for c in choices if c.is_correct}
-                wrong_ids = {str(c.id) for c in choices if not c.is_correct}
-                chosen = set(selected_ids)
-
-                max_pts = float(q.points)
-                earned = 0.0
-                correct_flag = False
-
-                if q.qtype in ("single", "truefalse"):
-                    if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
-                        earned = max_pts
-                        correct_flag = True
-                else:
-                    total_correct = len(correct_ids)
-                    sel_correct = len(chosen & correct_ids)
-                    sel_wrong = len(chosen & wrong_ids)
-
-                    if total_correct > 0:
-                        fraction = sel_correct / total_correct
-                        if module.negative_marking:
-                            fraction -= sel_wrong / max(1, len(wrong_ids))
-                        fraction = max(0.0, min(1.0, fraction))
-                        earned = round(max_pts * fraction, 2)
-                        correct_flag = fraction == 1.0 and sel_wrong == 0
-
-                questions_data.append(
-                    {
-                        "id": q.id,
-                        "text": q.text,
-                        "qtype": q.qtype,
-                        "points": max_pts,
-                        "explanation": q.explanation or "",
-                        "choices": [
-                            {
-                                "id": c.id,
-                                "text": c.text,
-                                "is_correct": c.is_correct,
-                            }
-                            for c in choices
-                        ],
-                        "selected_choice_ids": selected_ids,
-                        "correct": correct_flag,
-                        "earned": earned,
-                        "max_points": max_pts,
-                    }
-                )
-
-        payload = {
-            "id": str(attempt.id),
-            "module_id": str(module.id),
-            "module_title": module.title,
-            "user_id": str(attempt.user_id),
-            "username": getattr(attempt.user, "username", ""),
-            "score": attempt.score,
-            "passed": attempt.passed,
-            "created_at": attempt.created_at,
-            "completed_at": attempt.completed_at,
-            "questions": questions_data,
-        }
-
-        serializer = AttemptReviewSerializer(payload)
-        return response.Response(serializer.data)
+    # You can keep AttemptReviewSerializer for schema, no need to re-serialise
+    return response.Response(payload)
 
 
 class StartModuleAttemptView(APIView):
@@ -799,6 +750,77 @@ def my_dashboard(request):
 # NOTE: your detailed implementations for start_module_attempt() and
 #       submit_started_attempt() remain unchanged — keep them here below.
 #       Include @extend_schema annotations as shown earlier.
+
+@extend_schema(responses=AttemptReviewSerializer)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def attempt_review(request, attempt_id: str):
+    """
+    Read-only review of a completed attempt.
+
+    Returns the module, overall score/pass flag, and a list of questions
+    with choices, showing which ones were selected and which are correct.
+    """
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id,
+            user=request.user,
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    module = attempt.module
+
+    # Load all questions + choices for this module
+    questions = list(module.questions.prefetch_related("choices").all())
+    q_map = {str(q.id): q for q in questions}
+
+    # answers is stored as {question_id: [choice_ids]}
+    answers = attempt.answers or {}
+
+    review_questions = []
+    for qid, q in q_map.items():
+        selected_ids = set(str(cid) for cid in answers.get(qid, []))
+
+        choice_payload = []
+        for c in q.choices.all():
+            choice_payload.append(
+                {
+                    "id": c.id,
+                    "text": c.text,
+                    "is_correct": c.is_correct,
+                    "selected": str(c.id) in selected_ids,
+                }
+            )
+
+        review_questions.append(
+            {
+                "id": q.id,
+                "text": q.text,
+                "qtype": q.qtype,
+                "points": float(q.points),
+                "explanation": q.explanation or "",
+                "choices": choice_payload,
+            }
+        )
+
+    payload = {
+        "attempt_id": attempt.id,
+        "module_id": module.id,
+        "module_title": module.title,
+        "score_percent": attempt.score,
+        "passed": attempt.passed,
+        "created_at": attempt.created_at,
+        "completed_at": attempt.completed_at,
+        "questions": review_questions,
+    }
+
+    ser = AttemptReviewSerializer(payload)
+    return response.Response(ser.data)
+
+
+
+
 def _get_next_unanswered_question(attempt: ModuleAttempt):
     """
     Returns (Question or None, remaining_count, total_count) based on
@@ -1741,3 +1763,24 @@ def manager_dashboard(request):
 
     ser = ManagerDashboardSerializer(payload)
     return response.Response(ser.data)
+
+##### Badges
+
+@extend_schema(
+    responses=UserBadgeSerializer(many=True),
+    description="List badges awarded to the current user."
+)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_badges(request):
+    """
+    Return all UserBadge records for the currently authenticated user.
+    """
+    qs = (
+        UserBadge.objects
+        .filter(user=request.user)
+        .select_related("badge", "badge__skill", "badge__team", "badge__department")
+        .order_by("-awarded_at")
+    )
+    serializer = UserBadgeSerializer(qs, many=True)
+    return response.Response(serializer.data)

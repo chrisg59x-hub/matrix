@@ -181,7 +181,7 @@ function resumeAttempt (a: Attempt) {
               <td class="px-3 py-2 text-right">
                 <div class="inline-flex gap-2">
                   <NuxtLink
-                    :to="`/attempts/${a.module?.id}/review`"
+                    :to="`/attempts/${a.id}/review`"
                     class="text-xs text-emerald-700 hover:underline"
                   >
                     Review
