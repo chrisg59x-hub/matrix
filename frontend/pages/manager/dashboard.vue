@@ -272,6 +272,12 @@ async function load () {
           >
             View group leaderboard
           </NuxtLink>
+          <NuxtLink
+            to="/manager/badges"
+            class="inline-flex items-center mt-2 text-xs text-emerald-700 hover:underline"
+          >
+            View badge rules
+          </NuxtLink>
         </div>
       </section>
 

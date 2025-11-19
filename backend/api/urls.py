@@ -19,6 +19,7 @@ from .views import (
     attempt_review,
     StartModuleAttemptView,
     manager_dashboard,
+    manager_badge_rules,
     my_dashboard,
     my_badges,
     start_module_attempt,
@@ -96,6 +97,7 @@ urlpatterns = [
     path("attempts/<uuid:attempt_id>/finish/", finish_attempt, name="finish-attempt"),
     path("attempts/<uuid:attempt_id>/review/", attempt_review, name="attempt-review"),
     path("manager/dashboard/", manager_dashboard, name="manager-dashboard"),
+    path("manager/badges/", manager_badge_rules, name="manager-badges"),
     path("me/dashboard/", my_dashboard, name="my-dashboard"),
     path("me/module-attempts/", MyModuleAttemptsView.as_view(), name="my-module-attempts"),
     # Simple org leaderboard

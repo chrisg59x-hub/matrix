@@ -11,7 +11,7 @@ from datetime import timedelta
 # -----------------------------------------------------------------------------
 from django.http import HttpResponse
 from django.db import models
-from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value, Avg
+from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value, Avg, Count
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes, action
 from accounts.models import Org, User
@@ -1765,6 +1765,50 @@ def manager_dashboard(request):
     return response.Response(ser.data)
 
 ##### Badges
+@extend_schema(
+    description="Summary of badge rules in this org, including how many users hold each badge."
+)
+@api_view(["GET"])
+@permission_classes([IsManagerForWrites])
+def manager_badge_rules(request):
+    """
+    For managers: see all badge rules plus holder counts and sample users.
+    """
+    user = request.user
+    org = getattr(user, "org", None)
+
+    qs = (
+        Badge.objects
+        .select_related("skill", "team", "department")
+    )
+
+    # Scope to manager's org if present
+    if org is not None:
+        qs = qs.filter(org=org)
+
+    # Annotate with how many users hold each badge
+    qs = qs.annotate(holder_count=Count("userbadge"))
+
+    rows = []
+    for badge in qs:
+        # Grab up to 3 example holders (newest first)
+        holders_qs = (
+            UserBadge.objects
+            .filter(badge=badge)
+            .select_related("user")
+            .order_by("-awarded_at")[:3]
+        )
+        sample_holders = [ub.user.username for ub in holders_qs]
+
+        rows.append(
+            {
+                "badge": BadgeSerializer(badge).data,
+                "holder_count": badge.holder_count or 0,
+                "sample_holders": sample_holders,
+            }
+        )
+
+    return response.Response(rows)
 
 @extend_schema(
     responses=UserBadgeSerializer(many=True),
@@ -1784,3 +1828,22 @@ def my_badges(request):
     )
     serializer = UserBadgeSerializer(qs, many=True)
     return response.Response(serializer.data)
+
+    @extend_schema(
+        responses=UserBadgeSerializer(many=True),
+        description="List badges awarded to the currently authenticated user.",
+    )
+    @api_view(["GET"])
+    @permission_classes([permissions.IsAuthenticated])
+    def my_badges(request):
+        """
+        Return UserBadge rows for the current user.
+        """
+        qs = (
+            UserBadge.objects
+            .filter(user=request.user)
+            .select_related("badge", "badge__skill", "badge__team", "badge__department")
+            .order_by("-awarded_at")
+        )
+        data = UserBadgeSerializer(qs, many=True).data
+        return response.Response(data)
