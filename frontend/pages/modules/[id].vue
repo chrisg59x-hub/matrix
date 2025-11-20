@@ -3,153 +3,170 @@
 const route = useRoute()
 const router = useRouter()
 const { get, post } = useApi()
+const auth = useAuth()
 
 const moduleId = computed(() => route.params.id as string)
 
-type Module = {
-  id: string
-  title?: string | null
-  description?: string | null
-  difficulty?: number | null
-  pass_mark?: number | null
-  passing_score?: number | null
-  question_pool_count?: number | null
-  shuffle_questions?: boolean
-  shuffle_choices?: boolean
-  negative_marking?: boolean
-  require_viewed?: boolean
-  sop?: string | null
-  // plus whatever else your serializer returns
-}
-
-const mod = ref<Module | null>(null)
 const loading = ref(true)
-const err = ref<string | null>(null)
-const startError = ref<string | null>(null)
+const error = ref<string | null>(null)
 const starting = ref(false)
+const moduleData = ref<any | null>(null)
 
-onMounted(load)
+// Load module details
+onMounted(loadModule)
 
-async function load () {
+async function loadModule () {
   loading.value = true
-  err.value = null
+  error.value = null
   try {
     const data: any = await get(`/modules/${moduleId.value}/`)
-    mod.value = data
+    moduleData.value = data
   } catch (e: any) {
-    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load module')
+    error.value = e?.data
+      ? JSON.stringify(e.data)
+      : (e?.message || 'Failed to load module')
   } finally {
     loading.value = false
   }
 }
 
+// Start training using the SAME endpoint/logic as demo.vue
 async function startTraining () {
-  startError.value = null
+  // Require login (frontend) before we even call the API
+  if (!auth.loggedIn) {
+    router.push(`/login?next=${encodeURIComponent(route.fullPath)}`)
+    return
+  }
+
   starting.value = true
+  error.value = null
+
   try {
-    // EXACTLY the same endpoint pattern as used in demo.vue
+    // This must be a POST and must go through useApi()
     const data: any = await post(`/modules/${moduleId.value}/start/`, {})
 
-    // Backend might return { attempt_id: "..." } or { id: "..." }
-    const attemptId = data.attempt_id || data.id
+    // Accept either { attempt_id: "…" } or { id: "…" } or nested
+    const attemptId =
+      data?.attempt_id ||
+      data?.id ||
+      data?.attempt?.id
+
     if (!attemptId) {
-      console.error('No attempt_id returned from /modules/<id>/start/', data)
-      startError.value = 'Server did not return an attempt id.'
-      return
+      throw new Error('No attempt_id returned from /modules/:id/start/')
     }
 
+    // Navigate to the per-attempt quiz page
     await router.push(`/modules/${moduleId.value}/attempt/${attemptId}`)
   } catch (e: any) {
-    console.error('Failed to start attempt', e)
-    // bubble up backend error message if present
-    if (e?.data) {
-      startError.value = typeof e.data === 'string' ? e.data : JSON.stringify(e.data)
-    } else {
-      startError.value = e?.message || 'Failed to start training'
-    }
+    // If auth is missing/invalid, you'll see:
+    // {"detail": "Authentication credentials were not provided."}
+    error.value = e?.data
+      ? JSON.stringify(e.data)
+      : (e?.message || 'Failed to start attempt')
   } finally {
     starting.value = false
   }
 }
+
+function difficultyLabel (n?: number | null) {
+  if (n == null) return 'Not set'
+  if (n <= 1) return 'Easy'
+  if (n === 2) return 'Medium'
+  return 'Hard'
+}
 </script>
 
 <template>
-  <div class="max-w-4xl mx-auto space-y-4">
-    <header class="flex items-center justify-between gap-3">
+  <div class="max-w-3xl mx-auto space-y-4">
+    <div class="flex items-center justify-between gap-2">
       <div>
         <h1 class="text-2xl font-bold">
-          {{ mod?.title || 'Module' }}
+          {{ moduleData?.title || 'Module' }}
         </h1>
         <p class="text-sm text-gray-600">
           View details and start a training attempt for this module.
         </p>
       </div>
 
-      <button
-        type="button"
-        class="px-4 py-2 rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 text-sm"
-        :disabled="starting || loading"
-        @click="startTraining"
+      <NuxtLink
+        to="/me/attempts"
+        class="px-3 py-1.5 text-xs rounded border bg-white hover:bg-gray-50"
       >
-        <span v-if="starting">Starting…</span>
-        <span v-else>Start training</span>
-      </button>
-    </header>
+        My attempts
+      </NuxtLink>
+    </div>
 
-    <div v-if="loading" class="text-sm text-gray-500">
+    <div v-if="loading" class="p-4 bg-gray-100 rounded text-sm">
       Loading module…
     </div>
 
-    <div v-else-if="err" class="p-3 rounded bg-red-100 text-sm text-red-800 break-all">
-      {{ err }}
+    <div
+      v-else-if="error"
+      class="p-3 bg-red-100 rounded text-sm text-red-700 whitespace-pre-wrap"
+    >
+      {{ error }}
     </div>
 
-    <div v-else-if="mod" class="space-y-4">
-      <section class="bg-white border rounded-xl shadow-sm p-4 space-y-2">
-        <h2 class="text-sm font-semibold text-gray-800">
-          {{ mod.title }}
-        </h2>
-        <p class="text-sm text-gray-600 whitespace-pre-line">
-          {{ mod.description || 'No description provided.' }}
-        </p>
+    <div v-else-if="moduleData" class="space-y-4">
+      <!-- Basic module info -->
+      <section class="bg-white rounded-xl shadow p-4 space-y-2">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div class="text-xs text-gray-500 uppercase tracking-wide">
+              Module
+            </div>
+            <div class="font-semibold">
+              {{ moduleData.title }}
+            </div>
+          </div>
 
-        <dl class="mt-2 grid gap-2 text-xs text-gray-600 sm:grid-cols-2">
-          <div class="flex items-center justify-between">
-            <dt class="font-medium">Difficulty</dt>
-            <dd>{{ mod.difficulty ?? '—' }}</dd>
+          <div class="flex flex-wrap items-center gap-3 text-xs text-gray-600">
+            <div>
+              <span class="font-semibold">Difficulty:</span>
+              <span>{{ difficultyLabel(moduleData.difficulty) }}</span>
+            </div>
+            <div>
+              <span class="font-semibold">Pass mark:</span>
+              <span>{{ moduleData.pass_mark ?? '—' }}%</span>
+            </div>
           </div>
-          <div class="flex items-center justify-between">
-            <dt class="font-medium">Pass mark</dt>
-            <dd>{{ mod.pass_mark ?? mod.passing_score ?? '—' }}%</dd>
-          </div>
-          <div class="flex items-center justify-between">
-            <dt class="font-medium">Question pool</dt>
-            <dd>
-              <span v-if="mod.question_pool_count">
-                {{ mod.question_pool_count }} questions per attempt
-              </span>
-              <span v-else>
-                All questions
-              </span>
-            </dd>
-          </div>
-          <div class="flex items-center justify-between">
-            <dt class="font-medium">Options</dt>
-            <dd class="text-right">
-              <span v-if="mod.shuffle_questions">Shuffle questions; </span>
-              <span v-if="mod.shuffle_choices">Shuffle choices; </span>
-              <span v-if="mod.negative_marking">Negative marking; </span>
-              <span v-if="mod.require_viewed">SOP must be viewed before quiz</span>
-              <span v-if="!mod.shuffle_questions && !mod.shuffle_choices && !mod.negative_marking && !mod.require_viewed">
-                Default behaviour
-              </span>
-            </dd>
-          </div>
-        </dl>
+
+          <button
+            type="button"
+            class="px-4 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
+            :disabled="starting"
+            @click="startTraining"
+          >
+            <span v-if="starting">Starting…</span>
+            <span v-else>Start training</span>
+          </button>
+        </div>
       </section>
 
-      <section v-if="startError" class="p-3 rounded bg-red-100 text-sm text-red-800 break-all">
-        {{ startError }}
+      <!-- Config / debug -->
+      <section class="bg-white rounded-xl shadow p-4 space-y-1 text-xs text-gray-600">
+        <div class="font-semibold text-gray-800">
+          Question pool:
+          <span class="font-normal">
+            {{ moduleData.question_pool || 'All questions' }}
+          </span>
+        </div>
+        <div>
+          Shuffle questions:
+          <b>{{ moduleData.shuffle_questions ? 'Yes' : 'No' }}</b>
+        </div>
+        <div>
+          Shuffle choices:
+          <b>{{ moduleData.shuffle_choices ? 'Yes' : 'No' }}</b>
+        </div>
+        <div>
+          Negative marking:
+          <b>{{ moduleData.negative_marking ? 'Yes' : 'No' }}</b>
+        </div>
+        <div>
+          SOP must be viewed before quiz:
+          <b>{{ moduleData.require_sop_view ? 'Yes' : 'No' }}</b>
+        </div>
       </section>
 
       <section class="space-y-1 text-[10px] text-gray-500">
@@ -157,7 +174,7 @@ async function startTraining () {
           Raw module payload (debug)
         </div>
         <pre class="bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto max-h-64">
-{{ JSON.stringify(mod, null, 2) }}
+{{ JSON.stringify(moduleData, null, 2) }}
         </pre>
       </section>
     </div>
