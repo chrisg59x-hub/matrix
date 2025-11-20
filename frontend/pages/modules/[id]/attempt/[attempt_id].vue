@@ -1,335 +1,374 @@
 <!-- frontend/pages/modules/[id]/attempt/[attempt_id].vue -->
-<script setup>
+<script setup lang="ts">
 const route = useRoute()
 const router = useRouter()
-const { get, post } = useApi()
+const { post } = useApi()
 
-const moduleId = computed(() => route.params.id)
-const attemptId = computed(() => route.params.attempt_id)
+const moduleId = computed(() => route.params.id as string)
+const attemptId = computed(() => route.params.attempt_id as string)
+
+type Choice = {
+  id: string
+  text: string
+}
+
+type Question = {
+  id: string
+  text: string
+  qtype?: string | null
+  points?: number | null
+  choices: Choice[]
+  explanation?: string | null
+}
 
 const loading = ref(true)
-const err = ref(null)
-const attempt = ref(null)
-
-// local answer state: { [questionId]: Set of choiceIds (stored as array) }
-const answers = ref({})
-
-// submission state
 const submitting = ref(false)
-const submitError = ref(null)
-const submitResult = ref(null)
+const err = ref<string | null>(null)
 
-// debug toggle
-const showRaw = ref(false)
+const attempt = ref<any | null>(null)
+const currentQuestion = ref<Question | null>(null)
+const selected = ref<string[]>([])
 
-onMounted(load)
+const totalQuestions = ref<number>(0)
+const answeredCount = ref<number>(0)
 
-async function load () {
+const feedback = ref<any | null>(null)
+const finished = ref(false)
+const finishSummary = ref<any | null>(null)
+
+onMounted(() => {
+  // Load the first question as soon as we land on this page
+  loadNextQuestion(true)
+})
+
+function resetStateForNewQuestion () {
+  feedback.value = null
+  selected.value = []
+}
+
+function isMultiSelect (q: Question | null) {
+  if (!q) return false
+  const t = (q.qtype || '').toLowerCase()
+  return t === 'multi' || t === 'multiple' || t === 'multi-select'
+}
+
+function toggleChoice (choiceId: string) {
+  const q = currentQuestion.value
+  if (!q) return
+
+  if (!isMultiSelect(q)) {
+    // single / truefalse behaviour – radio style
+    if (selected.value.length === 1 && selected.value[0] === choiceId) {
+      selected.value = []
+    } else {
+      selected.value = [choiceId]
+    }
+  } else {
+    // multi-select – checkbox style
+    if (selected.value.includes(choiceId)) {
+      selected.value = selected.value.filter(id => id !== choiceId)
+    } else {
+      selected.value = [...selected.value, choiceId]
+    }
+  }
+}
+
+async function loadNextQuestion (initial = false) {
   loading.value = true
   err.value = null
-  submitError.value = null
-  submitResult.value = null
+  if (!initial) {
+    resetStateForNewQuestion()
+  }
 
   try {
-    const data = await get(`/attempts/${attemptId.value}/`)
-    attempt.value = data || null
+    const resp: any = await post(`/attempts/${attemptId.value}/next/`, {})
+    console.log('next/ response', resp)
 
-    // Pre-fill answers if backend provides them (e.g. on resumed attempt)
-    const initial = (data && data.answers) || {}
-    const normalised = {}
-    for (const [qid, choiceList] of Object.entries(initial)) {
-      if (Array.isArray(choiceList)) {
-        normalised[qid] = [...new Set(choiceList.map(String))]
-      }
+    attempt.value = resp.attempt || attempt.value
+
+    if (resp.done) {
+      finished.value = true
+      finishSummary.value = resp.summary || resp
+      currentQuestion.value = null
+      return
     }
-    answers.value = normalised
-  } catch (e) {
-    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load attempt')
+
+    const q = resp.question as Question | undefined
+    if (!q) {
+      throw new Error('Backend did not return a question')
+    }
+
+    currentQuestion.value = q
+
+    const progress = resp.progress || {}
+    // try to infer progress from various shapes
+    totalQuestions.value =
+      progress.total ||
+      progress.total_questions ||
+      resp.total_questions ||
+      0
+
+    answeredCount.value =
+      progress.answered ??
+      progress.current_index ??
+      (totalQuestions.value && resp.remaining_questions != null
+        ? totalQuestions.value - resp.remaining_questions
+        : 0)
+
+    selected.value = Array.isArray(resp.preselected_choices)
+      ? resp.preselected_choices
+      : []
+  } catch (e: any) {
+    console.error('Failed to load next question', e)
+    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load next question')
   } finally {
     loading.value = false
   }
 }
 
-// ---- Helpers to interpret the attempt payload ----
-
-// Extract questions from common shapes
-const questions = computed(() => {
-  const a = attempt.value
-  if (!a) return []
-
-  if (Array.isArray(a.questions)) return a.questions
-  if (Array.isArray(a.items)) return a.items
-  if (a.quiz && Array.isArray(a.quiz.questions)) return a.quiz.questions
-
-  return []
-})
-
-// Human-friendly title
-const moduleTitle = computed(() => {
-  const a = attempt.value
-  if (!a) return `Module ${moduleId.value}`
-  return a.module_title || a.module_name || a.module?.title || a.module?.name || `Module ${moduleId.value}`
-})
-
-function questionText (q) {
-  return q.text || q.question || q.prompt || 'Untitled question'
-}
-
-function isMulti (q) {
-  const t = String(q.qtype || q.type || '').toLowerCase()
-  if (q.multi === true || q.multiple === true || q.allow_multiple === true) return true
-  if (t.includes('multi') && !t.includes('single')) return true
-  return false
-}
-
-function questionPoints (q) {
-  const n = q.points ?? q.score ?? null
-  if (!n && n !== 0) return null
-  return Number.isNaN(Number(n)) ? null : Number(n)
-}
-
-// Choices: support several shapes
-function questionChoices (q) {
-  const raw =
-    q.choices ||
-    q.options ||
-    q.answers ||
-    []
-
-  if (!Array.isArray(raw)) return []
-
-  return raw.map((c, idx) => {
-    if (c && typeof c === 'object') {
-      return {
-        id: c.id ?? c.pk ?? String(idx),
-        text: c.text ?? c.label ?? c.answer ?? `Option ${idx + 1}`,
-      }
-    }
-    // plain string
-    return {
-      id: String(idx),
-      text: String(c),
-    }
-  })
-}
-
-// ---- Answer selection logic ----
-
-function isSelected (questionId, choiceId) {
-  const key = String(questionId)
-  const cid = String(choiceId)
-  const list = answers.value[key] || []
-  return list.includes(cid)
-}
-
-function toggleChoice (question, choice) {
-  const qid = question.id ?? question.qid ?? question.pk
-  const cid = choice.id
-
-  if (!qid || cid == null) return
-
-  const key = String(qid)
-  const current = answers.value[key] ? [...answers.value[key]] : []
-  const multi = isMulti(question)
-
-  if (multi) {
-    // multi-select behaves like checkboxes
-    if (current.includes(String(cid))) {
-      answers.value[key] = current.filter(x => x !== String(cid))
-    } else {
-      current.push(String(cid))
-      answers.value[key] = current
-    }
-  } else {
-    // single-select behaves like radio
-    answers.value[key] = [String(cid)]
+async function submitAnswer () {
+  if (!currentQuestion.value) return
+  if (!selected.value.length) {
+    // you can relax this if you want to allow skipping
+    err.value = 'Please select at least one answer.'
+    return
   }
-}
-
-// ---- Submit answers ----
-
-async function submitAnswers () {
-  if (!questions.value.length) return
 
   submitting.value = true
-  submitError.value = null
-  submitResult.value = null
+  err.value = null
 
   try {
-    // Build payload expected by backend: { question_id: [choice_id, ...] }
-    const payloadAnswers = {}
-
-    for (const q of questions.value) {
-      const qid = q.id ?? q.qid ?? q.pk
-      if (!qid) continue
-      const key = String(qid)
-      const selected = answers.value[key] || []
-      // Only send if there is at least one selection; adjust if you want to send empties
-      payloadAnswers[qid] = selected
+    const payload = {
+      question_id: currentQuestion.value.id,
+      choice_ids: selected.value,
     }
 
-    const payload = { answers: payloadAnswers }
+    const resp: any = await post(`/attempts/${attemptId.value}/submit/`, payload)
+    console.log('submit/ response', resp)
 
-    const data = await post(`/attempts/${attemptId.value}/submit/`, payload)
-    submitResult.value = data || { ok: true }
-  } catch (e) {
-    submitError.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to submit answers')
+    feedback.value = resp.feedback || resp
+
+    const progress = resp.progress || {}
+    if (progress.answered != null) {
+      answeredCount.value = progress.answered
+    }
+
+    if (resp.done) {
+      finished.value = true
+      finishSummary.value = resp.summary || resp
+      currentQuestion.value = null
+    } else {
+      // For immediate-feedback modules we show feedback + "Next" button,
+      // so we do NOT auto-advance here. The user will click "Next question".
+    }
+  } catch (e: any) {
+    console.error('Failed to submit answer', e)
+    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to submit answer')
   } finally {
     submitting.value = false
   }
 }
+
+async function goNextAfterFeedback () {
+  await loadNextQuestion(false)
+}
+
+function goToReview () {
+  router.push(`/attempts/${attemptId.value}/review`)
+}
+
+const progressLabel = computed(() => {
+  if (!totalQuestions.value) return ''
+  const currentIndex = Math.min(answeredCount.value + (currentQuestion.value ? 1 : 0), totalQuestions.value)
+  return `Question ${currentIndex} of ${totalQuestions.value}`
+})
 </script>
 
 <template>
-  <div class="space-y-4">
-    <!-- Header -->
-    <div class="flex items-start justify-between gap-3">
-      <div>
-        <h1 class="text-2xl font-bold">
-          Training Attempt
-        </h1>
-        <p class="text-xs text-gray-500">
-          Module: <span class="font-semibold">{{ moduleTitle }}</span><br>
-          Module ID: {{ moduleId }} · Attempt ID: {{ attemptId }}
-        </p>
-      </div>
-
-      <div class="flex flex-col items-end gap-2">
-        <button
-          type="button"
-          class="px-4 py-2 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-          :disabled="submitting || loading || !questions.length"
-          @click="submitAnswers"
-        >
-          <span v-if="submitting">Submitting…</span>
-          <span v-else>Submit answers</span>
-        </button>
-
-        <NuxtLink
-          :to="`/modules/${moduleId}`"
-          class="text-xs text-gray-600 hover:underline"
-        >
-          ← Back to module
+  <div class="max-w-3xl mx-auto space-y-4">
+    <header class="space-y-1">
+      <div class="text-xs text-gray-500">
+        <NuxtLink to="/modules" class="hover:underline">
+          Modules
         </NuxtLink>
+        <span class="mx-1">/</span>
+        <NuxtLink :to="`/modules/${moduleId}`" class="hover:underline">
+          Module
+        </NuxtLink>
+        <span class="mx-1">/</span>
+        <span>Attempt</span>
       </div>
-    </div>
+      <h1 class="text-xl font-bold">
+        Module attempt
+      </h1>
+      <p class="text-xs text-gray-500">
+        Answer one question at a time. Your progress is saved on each submit.
+      </p>
+    </header>
 
-    <!-- Loading / error states -->
-    <div v-if="loading" class="text-gray-500">
-      Loading attempt…
-    </div>
-
-    <div v-else-if="err" class="text-red-600 break-all text-xs">
+    <div v-if="err" class="text-sm text-red-600 break-all">
       {{ err }}
     </div>
 
-    <div v-else-if="!attempt" class="text-sm text-gray-600">
-      No attempt data returned.
-    </div>
-
-    <!-- Main quiz UI -->
-    <div v-else class="space-y-6">
-      <!-- Submission result banner -->
-      <div v-if="submitResult" class="rounded border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-        <div class="font-semibold mb-1">
-          Answers submitted.
+    <!-- Finished view -->
+    <div
+      v-if="finished"
+      class="bg-white border rounded-xl shadow p-4 space-y-3"
+    >
+      <h2 class="text-lg font-semibold">
+        Attempt completed
+      </h2>
+      <div class="text-sm text-gray-700 space-y-1">
+        <div v-if="finishSummary?.percent != null">
+          <span class="font-semibold">Score:</span>
+          <span> {{ finishSummary.percent }}%</span>
         </div>
-        <div class="space-y-0.5">
-          <div v-if="submitResult.score_percent !== undefined">
-            Score: <span class="font-semibold">{{ submitResult.score_percent }}%</span>
-          </div>
-          <div v-if="submitResult.passed !== undefined">
-            Status:
-            <span
-              class="font-semibold"
-              :class="submitResult.passed ? 'text-emerald-800' : 'text-red-700'"
-            >
-              {{ submitResult.passed ? 'Passed' : 'Not passed' }}
-            </span>
-          </div>
-          <div v-if="submitResult.message">
-            {{ submitResult.message }}
-          </div>
+        <div v-if="finishSummary?.passed != null">
+          <span class="font-semibold">Result:</span>
+          <span>
+            {{ finishSummary.passed ? 'Passed' : 'Failed' }}
+          </span>
         </div>
       </div>
 
-      <div v-if="submitError" class="rounded border border-red-200 bg-red-50 p-3 text-xs text-red-800">
-        {{ submitError }}
-      </div>
-
-      <!-- Questions list -->
-      <div v-if="questions.length === 0" class="text-sm text-gray-600">
-        This attempt does not have any questions attached yet.
-      </div>
-
-      <div v-else class="space-y-4">
-        <div
-          v-for="(q, idx) in questions"
-          :key="q.id || idx"
-          class="border rounded bg-white p-3 space-y-2"
-        >
-          <div class="flex justify-between gap-2">
-            <div class="font-medium text-sm">
-              Q{{ idx + 1 }}. {{ questionText(q) }}
-            </div>
-            <div class="flex items-center gap-2 text-[11px] text-gray-500">
-              <span v-if="isMulti(q)" class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                Multi-select
-              </span>
-              <span v-else class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5">
-                Single-select
-              </span>
-              <span
-                v-if="questionPoints(q) !== null"
-                class="inline-flex items-center rounded-full bg-emerald-50 text-emerald-700 px-2 py-0.5"
-              >
-                {{ questionPoints(q) }} pts
-              </span>
-            </div>
-          </div>
-
-          <!-- Choices -->
-          <div class="space-y-1">
-            <button
-              v-for="c in questionChoices(q)"
-              :key="c.id"
-              type="button"
-              class="w-full flex items-center justify-between gap-2 px-2 py-1.5 rounded border text-xs text-left"
-              :class="isSelected(q.id ?? q.qid ?? q.pk, c.id)
-                ? 'border-emerald-500 bg-emerald-50'
-                : 'border-gray-200 hover:bg-gray-50'"
-              @click="toggleChoice(q, c)"
-            >
-              <span class="flex-1">
-                {{ c.text }}
-              </span>
-              <span
-                class="inline-flex items-center justify-center w-4 h-4 rounded-full border text-[10px]"
-                :class="isSelected(q.id ?? q.qid ?? q.pk, c.id)
-                  ? 'border-emerald-600 bg-emerald-600 text-white'
-                  : 'border-gray-300 bg-white text-transparent'"
-              >
-                ✓
-              </span>
-            </button>
-          </div>
-        </div>
-      </div>
-
-      <!-- Debug: raw JSON -->
-      <div class="mt-4 border-t pt-3">
+      <div class="flex flex-wrap gap-2">
         <button
           type="button"
-          class="text-xs text-gray-500 hover:text-gray-700 underline"
-          @click="showRaw = !showRaw"
+          class="px-3 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700"
+          @click="goToReview"
         >
-          {{ showRaw ? 'Hide' : 'Show' }} raw attempt JSON (debug)
+          View detailed review
         </button>
+        <NuxtLink
+          to="/me/attempts"
+          class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+        >
+          Back to my attempts
+        </NuxtLink>
+      </div>
 
-        <pre
-          v-if="showRaw"
-          class="mt-2 text-[11px] bg-gray-900 text-gray-100 rounded p-3 overflow-x-auto max-h-80"
-        >{{ JSON.stringify(attempt, null, 2) }}</pre>
+      <div
+        v-if="finishSummary"
+        class="mt-3 text-[11px] text-gray-500"
+      >
+        <div class="font-semibold mb-1">
+          Raw summary (debug)
+        </div>
+        <pre class="bg-gray-900 text-gray-100 rounded p-2 overflow-x-auto max-h-40">
+{{ JSON.stringify(finishSummary, null, 2) }}
+        </pre>
+      </div>
+    </div>
+
+    <!-- Question runner -->
+    <div
+      v-else
+      class="bg-white border rounded-xl shadow p-4 space-y-4"
+    >
+      <div class="flex items-center justify-between text-xs text-gray-500">
+        <div>
+          {{ progressLabel }}
+        </div>
+        <div v-if="attempt?.score_percent != null">
+          Current score: <b>{{ attempt.score_percent }}%</b>
+        </div>
+      </div>
+
+      <div v-if="loading && !currentQuestion" class="text-sm text-gray-500">
+        Loading question…
+      </div>
+
+      <div v-else-if="currentQuestion" class="space-y-3">
+        <div class="space-y-1">
+          <div class="text-sm font-medium">
+            {{ currentQuestion.text }}
+          </div>
+          <div class="text-[11px] text-gray-500">
+            Type: {{ (currentQuestion.qtype || 'single').toUpperCase() }}
+            <span v-if="currentQuestion.points != null">
+              · {{ currentQuestion.points }} pts
+            </span>
+          </div>
+        </div>
+
+        <div class="space-y-1">
+          <button
+            v-for="choice in currentQuestion.choices"
+            :key="choice.id"
+            type="button"
+            class="w-full text-left px-3 py-2 border rounded text-sm flex items-center gap-2"
+            :class="selected.includes(choice.id)
+              ? 'bg-emerald-50 border-emerald-500'
+              : 'bg-white hover:bg-gray-50 border-gray-200'"
+            @click="toggleChoice(choice.id)"
+          >
+            <span
+              class="inline-flex items-center justify-center w-4 h-4 border rounded-full text-[10px]"
+              :class="selected.includes(choice.id)
+                ? 'border-emerald-600 bg-emerald-600 text-white'
+                : 'border-gray-300 text-transparent'"
+            >
+              ✓
+            </span>
+            <span>{{ choice.text }}</span>
+          </button>
+        </div>
+
+        <!-- Submit / actions -->
+        <div class="flex flex-wrap gap-2 pt-2">
+          <button
+            type="button"
+            class="px-4 py-1.5 text-sm rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50"
+            :disabled="submitting || loading"
+            @click="submitAnswer"
+          >
+            {{ submitting ? 'Submitting…' : 'Submit answer' }}
+          </button>
+
+          <button
+            v-if="feedback && !finished"
+            type="button"
+            class="px-3 py-1.5 text-sm rounded border bg-white hover:bg-gray-50"
+            :disabled="loading"
+            @click="goNextAfterFeedback"
+          >
+            Next question
+          </button>
+        </div>
+
+        <!-- Feedback (immediate feedback modules) -->
+        <div
+          v-if="feedback"
+          class="mt-2 text-sm"
+        >
+          <div
+            v-if="typeof feedback.correct === 'boolean'"
+            class="mb-1"
+          >
+            <span
+              v-if="feedback.correct"
+              class="inline-flex items-center rounded-full bg-emerald-100 text-emerald-700 px-2 py-0.5 text-xs"
+            >
+              ✓ Correct
+            </span>
+            <span
+              v-else
+              class="inline-flex items-center rounded-full bg-red-100 text-red-700 px-2 py-0.5 text-xs"
+            >
+              ✕ Incorrect
+            </span>
+          </div>
+          <div v-if="feedback.message" class="text-xs text-gray-700">
+            {{ feedback.message }}
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="text-sm text-gray-500"
+      >
+        No more questions available for this attempt.
       </div>
     </div>
   </div>

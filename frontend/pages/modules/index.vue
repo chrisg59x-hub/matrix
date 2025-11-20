@@ -288,15 +288,12 @@ async function startModule (mod) {
             >
               View stats
             </NuxtLink>
-            <button
-              type="button"
-              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-60"
-              :disabled="startingId === m.id"
-              @click="startModule(m)"
+            <NuxtLink
+              :to="`/modules/${m.id}`"
+              class="px-3 py-1.5 text-xs rounded bg-emerald-600 text-white hover:bg-emerald-700"
             >
-              <span v-if="startingId === m.id">Starting…</span>
-              <span v-else>Start training</span>
-            </button>
+              Start training
+            </NuxtLink>
           </div>
         </div>
       </div>

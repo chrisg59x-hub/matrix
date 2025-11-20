@@ -5,6 +5,7 @@ from django.dispatch import receiver
 from django.utils import timezone
 
 from .models import ModuleAttempt, SupervisorSignoff, XPEvent, ModuleAttemptQuestion
+from .badges import auto_award_badges_for_user
 
 
 # ----------------------------------------------------
@@ -102,4 +103,18 @@ def award_xp_on_signoff(sender, instance: SupervisorSignoff, created, **kwargs):
             amount=150,
             meta={"supervisor": str(instance.supervisor_id)},
         )
+
+@receiver(post_save, sender=XPEvent)
+def evaluate_badges_after_xp(sender, instance: XPEvent, created, **kwargs):
+    """
+    Whenever new XP is recorded for a user, re-check their badges.
+    This covers module passes, quiz bonuses, supervisor signoffs, etc.
+    """
+    if not created:
+        return
+
+    user = instance.user
+    org = instance.org
+
+    auto_award_badges_for_user(user=user, org=org)
 

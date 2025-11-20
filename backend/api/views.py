@@ -74,6 +74,7 @@ from .serializers import (
     SOPViewSerializer,
     StartAttemptSerializer,
     SubmitAttemptRequestSerializer,
+    SubmitAnswerSerializer,
     NextQuestionSerializer,
     SingleAnswerRequestSerializer,
     ManagerDashboardSerializer,
@@ -442,6 +443,7 @@ class MyModuleAttemptsView(APIView):
         )
         serializer = ModuleAttemptMeSerializer(qs, many=True)
         return Response(serializer.data)
+    
 
 class XPEventViewSet(viewsets.ModelViewSet):
     queryset = XPEvent.objects.select_related("user", "skill", "org")
@@ -640,6 +642,20 @@ def my_progress(request):
     }
     return response.Response(payload)
 
+@api_view(["GET"])
+@permission_classes([permissions.IsAuthenticated])
+def my_badges(request):
+    """
+    Return auto- and manually-awarded badges for the current user.
+    """
+    qs = (
+        UserBadge.objects
+        .select_related("badge", "badge__skill", "badge__team", "badge__department")
+        .filter(user=request.user)
+        .order_by("-awarded_at")
+    )
+    data = UserBadgeSerializer(qs, many=True).data
+    return response.Response(data)
 
 @extend_schema(responses=LeaderboardEntrySerializer(many=True))
 @decorators.api_view(["GET"])
@@ -1143,21 +1159,31 @@ def my_overdue_sops(request):
     responses=StartAttemptSerializer,
     description="Start a quiz attempt: backend selects & shuffles questions/choices. Returns attempt_id and the served questions.",
 )
-@decorators.api_view(["POST"])
-@decorators.permission_classes([permissions.IsAuthenticated])
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
 def start_module_attempt(request, module_id: str):
     """
     Gated by SOP view completion (if module.require_viewed).
     Randomises question pool and choice order; stores them on the attempt.
     """
+    # helpful debug if needed
+    # print("start_module_attempt called with module_id =", module_id)
+
     try:
-        module = Module.objects.get(id=module_id, active=True)
+        module = Module.objects.get(id=module_id)
     except Module.DoesNotExist:
-        raise ValidationError("Module not found or inactive.")
+        raise ValidationError("Module not found. Check the ID being sent from the frontend.")
+
+    if not module.active:
+        raise ValidationError("This module is inactive and cannot be started.")
 
     # Require viewed SOP?
     if module.require_viewed and module.sop_id:
-        viewed_ok = SOPView.objects.filter(sop_id=module.sop_id, user=request.user, completed=True).exists()
+        viewed_ok = SOPView.objects.filter(
+            sop_id=module.sop_id,
+            user=request.user,
+            completed=True
+        ).exists()
         if not viewed_ok:
             raise PermissionDenied("Please view the SOP media before starting the quiz.")
 
@@ -1255,6 +1281,292 @@ def my_sop_views(request):
     """
     qs = SOPView.objects.filter(user=request.user).select_related("sop")
     return response.Response(SOPViewSerializer(qs, many=True).data)
+# -------------------------------------------------------------------------
+# One-question-at-a-time quiz engine
+#   - /attempts/<attempt_id>/next/   [GET]
+#   - /attempts/<attempt_id>/submit/ [POST]
+#   - /attempts/<attempt_id>/finish/ [POST]
+# -------------------------------------------------------------------------
+
+@extend_schema(
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "attempt_id": {"type": "string", "format": "uuid"},
+                "index": {"type": "integer"},
+                "total": {"type": "integer"},
+                "done": {"type": "boolean"},
+                "question": QuestionPublicSerializer,
+            },
+        }
+    },
+    description="Get the next unanswered question for this attempt (one-question-at-a-time engine).",
+)
+@decorators.api_view(["GET"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def next_question(request, attempt_id: str):
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id,
+            user=request.user,
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    # If attempt is already completed, signal done
+    presented_ids = [str(x) for x in (attempt.presented_questions or [])]
+    if not presented_ids:
+        raise ValidationError("Attempt has no presented questions. Start again.")
+
+    answers = attempt.answers or {}
+    answered_ids = set(answers.keys())
+
+    next_qid = None
+    idx = None
+    for i, qid in enumerate(presented_ids, start=1):
+        if qid not in answered_ids:
+            next_qid = qid
+            idx = i
+            break
+
+    if not next_qid:
+        # Everything answered
+        return response.Response(
+            {
+                "attempt_id": str(attempt.id),
+                "done": True,
+                "index": len(presented_ids),
+                "total": len(presented_ids),
+                "question": None,
+            }
+        )
+
+    # Load that question with choices
+    module = attempt.module
+    q = module.questions.prefetch_related("choices").get(id=next_qid)
+
+    # Reorder choices according to choice_order
+    choice_order = (attempt.choice_order or {}).get(str(q.id)) or [
+        str(c.id) for c in q.choices.all()
+    ]
+    all_choices = list(q.choices.all())
+    ordered_choices = [
+        c for cid in choice_order for c in all_choices if str(c.id) == cid
+    ]
+    # Hint to DRF serializer
+    q._prefetched_objects_cache = {"choices": ordered_choices}
+
+    return response.Response(
+        {
+            "attempt_id": str(attempt.id),
+            "done": False,
+            "index": idx,
+            "total": len(presented_ids),
+            "question": QuestionPublicSerializer(q).data,
+        }
+    )
+
+
+@extend_schema(
+    request=SubmitAnswerSerializer,
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "attempt_id": {"type": "string", "format": "uuid"},
+                "question_id": {"type": "string", "format": "uuid"},
+                "earned": {"type": "number"},
+                "max": {"type": "number"},
+                "correct": {"type": "boolean"},
+                "message": {"type": "string"},
+            },
+        }
+    },
+    description="Submit an answer for a single question in a started attempt.",
+)
+@decorators.api_view(["POST"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def submit_question(request, attempt_id: str):
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id,
+            user=request.user,
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    serializer = SubmitAnswerSerializer(data=request.data)
+    serializer.is_valid(raise_exception=True)
+    qid = str(serializer.validated_data["question_id"])
+    chosen_ids = [str(cid) for cid in serializer.validated_data["choice_ids"]]
+
+    presented_ids = [str(x) for x in (attempt.presented_questions or [])]
+    if qid not in presented_ids:
+        raise ValidationError("Question is not part of this attempt.")
+
+    module = attempt.module
+    try:
+        q = module.questions.prefetch_related("choices").get(id=qid)
+    except module.questions.model.DoesNotExist:
+        raise ValidationError("Question not found for this module.")
+
+    max_pts = float(q.points)
+
+    correct_ids = {str(c.id) for c in q.choices.filter(is_correct=True)}
+    wrong_ids = {str(c.id) for c in q.choices.filter(is_correct=False)}
+    chosen = set(chosen_ids)
+
+    earned = 0.0
+    correct_flag = False
+    msg = ""
+
+    if q.qtype in ("single", "truefalse"):
+        if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
+            earned = max_pts
+            correct_flag = True
+        else:
+            earned = 0.0
+        msg = q.explanation or ("Correct." if correct_flag else "Incorrect.")
+    else:
+        # Multi-select with optional negative marking
+        total_correct = len(correct_ids)
+        sel_correct = len(chosen & correct_ids)
+        sel_wrong = len(chosen & wrong_ids)
+
+        if total_correct == 0:
+            earned = 0.0
+            correct_flag = False
+            msg = "No correct choices configured."
+        else:
+            fraction = sel_correct / total_correct
+            if module.negative_marking:
+                fraction -= sel_wrong / max(1, len(wrong_ids))
+            fraction = max(0.0, min(1.0, fraction))
+            earned = round(max_pts * fraction, 2)
+            correct_flag = fraction == 1.0 and sel_wrong == 0
+
+            if sel_wrong and module.negative_marking:
+                msg = "Some incorrect choices selected."
+            elif sel_correct < total_correct:
+                msg = "You missed some correct choices."
+            else:
+                msg = "Correct."
+            if q.explanation:
+                msg = f"{msg} {q.explanation}"
+
+    # Persist this answer on the attempt (but don't finish yet)
+    answers = attempt.answers or {}
+    answers[qid] = list(chosen_ids)
+    attempt.answers = answers
+    attempt.save(update_fields=["answers"])
+
+    return response.Response(
+        {
+            "attempt_id": str(attempt.id),
+            "question_id": qid,
+            "earned": earned,
+            "max": max_pts,
+            "correct": correct_flag,
+            "message": msg,
+        }
+    )
+
+
+@extend_schema(
+    responses={
+        200: {
+            "type": "object",
+            "properties": {
+                "attempt_id": {"type": "string", "format": "uuid"},
+                "percent": {"type": "integer"},
+                "passed": {"type": "boolean"},
+                "score": {"type": "number"},
+                "max_score": {"type": "number"},
+            },
+        }
+    },
+    description="Finish an attempt and compute the final score based on all stored answers.",
+)
+@decorators.api_view(["POST"])
+@decorators.permission_classes([permissions.IsAuthenticated])
+def finish_attempt(request, attempt_id: str):
+    try:
+        attempt = ModuleAttempt.objects.select_related("module").get(
+            id=attempt_id,
+            user=request.user,
+        )
+    except ModuleAttempt.DoesNotExist:
+        raise ValidationError("Attempt not found.")
+
+    module = attempt.module
+    presented_ids = [str(x) for x in (attempt.presented_questions or [])]
+    if not presented_ids:
+        raise ValidationError("Attempt has no presented questions. Start again.")
+
+    answers = attempt.answers or {}
+
+    # Load all questions with choices
+    questions = list(
+        module.questions.prefetch_related("choices").filter(id__in=presented_ids)
+    )
+    q_map = {str(q.id): q for q in questions}
+
+    total_earned = 0.0
+    total_max = 0.0
+
+    for qid in presented_ids:
+        q = q_map.get(qid)
+        if not q:
+            continue
+
+        max_pts = float(q.points)
+        total_max += max_pts
+
+        correct_ids = {str(c.id) for c in q.choices.filter(is_correct=True)}
+        wrong_ids = {str(c.id) for c in q.choices.filter(is_correct=False)}
+        chosen = set(str(cid) for cid in answers.get(qid, []))
+
+        earned = 0.0
+        if q.qtype in ("single", "truefalse"):
+            if len(chosen) == 1 and next(iter(chosen)) in correct_ids:
+                earned = max_pts
+            else:
+                earned = 0.0
+        else:
+            total_correct = len(correct_ids)
+            sel_correct = len(chosen & correct_ids)
+            sel_wrong = len(chosen & wrong_ids)
+
+            if total_correct == 0:
+                earned = 0.0
+            else:
+                fraction = sel_correct / total_correct
+                if module.negative_marking:
+                    fraction -= sel_wrong / max(1, len(wrong_ids))
+                fraction = max(0.0, min(1.0, fraction))
+                earned = round(max_pts * fraction, 2)
+
+        total_earned += earned
+
+    percent = int(round((total_earned / total_max) * 100)) if total_max > 0 else 0
+    passed = percent >= (module.pass_mark or module.passing_score)
+
+    # Finalise attempt
+    attempt.completed_at = timezone.now()
+    attempt.passed = passed
+    attempt.score = percent
+    attempt.save(update_fields=["completed_at", "passed", "score", "answers"])
+
+    return response.Response(
+        {
+            "attempt_id": str(attempt.id),
+            "percent": percent,
+            "passed": passed,
+            "score": total_earned,
+            "max_score": total_max,
+        }
+    )
 
 @extend_schema(
     request=SubmitAttemptRequestSerializer,  # legacy; new flow also works
