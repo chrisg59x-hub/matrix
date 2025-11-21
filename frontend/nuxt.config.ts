@@ -1,4 +1,5 @@
 ﻿export default defineNuxtConfig({
+  ssr: false,
   devtools: { enabled: true },
   pages: true,
   runtimeConfig: {

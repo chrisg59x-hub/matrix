@@ -1,8 +1,11 @@
 <!-- frontend/pages/modules/[id]/attempt/[attempt_id].vue -->
 <script setup lang="ts">
+definePageMeta({
+  ssr: false,
+})
 const route = useRoute()
 const router = useRouter()
-const { post } = useApi()
+const { get, post } = useApi()   // <- use GET + POST
 
 const moduleId = computed(() => route.params.id as string)
 const attemptId = computed(() => route.params.attempt_id as string)
@@ -25,7 +28,7 @@ const loading = ref(true)
 const submitting = ref(false)
 const err = ref<string | null>(null)
 
-const attempt = ref<any | null>(null)
+const attempt = ref<any | null>(null) // currently unused, kept for future stats if you want
 const currentQuestion = ref<Question | null>(null)
 const selected = ref<string[]>([])
 
@@ -73,6 +76,17 @@ function toggleChoice (choiceId: string) {
   }
 }
 
+async function loadFinishSummary () {
+  // Called when the backend reports done = true
+  try {
+    const resp: any = await post(`/attempts/${attemptId.value}/finish/`, {})
+    finishSummary.value = resp
+  } catch (e: any) {
+    console.error('Failed to load finish summary', e)
+    err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to load result')
+  }
+}
+
 async function loadNextQuestion (initial = false) {
   loading.value = true
   err.value = null
@@ -81,7 +95,12 @@ async function loadNextQuestion (initial = false) {
   }
 
   try {
-    const resp: any = await post(`/attempts/${attemptId.value}/next/`, {})
+    // BEFORE:
+    // const resp: any = await post(`/attempts/${attemptId.value}/next/`, {})
+
+    // AFTER: use GET to match the DRF view
+    const resp: any = await get(`/attempts/${attemptId.value}/next/`)
+
     console.log('next/ response', resp)
 
     attempt.value = resp.attempt || attempt.value
@@ -101,7 +120,6 @@ async function loadNextQuestion (initial = false) {
     currentQuestion.value = q
 
     const progress = resp.progress || {}
-    // try to infer progress from various shapes
     totalQuestions.value =
       progress.total ||
       progress.total_questions ||
@@ -143,24 +161,15 @@ async function submitAnswer () {
       choice_ids: selected.value,
     }
 
+    // Backend submit_question returns:
+    // { attempt_id, question_id, earned, max, correct, message }
     const resp: any = await post(`/attempts/${attemptId.value}/submit/`, payload)
     console.log('submit/ response', resp)
 
-    feedback.value = resp.feedback || resp
+    feedback.value = resp
 
-    const progress = resp.progress || {}
-    if (progress.answered != null) {
-      answeredCount.value = progress.answered
-    }
-
-    if (resp.done) {
-      finished.value = true
-      finishSummary.value = resp.summary || resp
-      currentQuestion.value = null
-    } else {
-      // For immediate-feedback modules we show feedback + "Next" button,
-      // so we do NOT auto-advance here. The user will click "Next question".
-    }
+    // We deliberately DO NOT auto-advance here, so that
+    // the user can see feedback then click "Next question".
   } catch (e: any) {
     console.error('Failed to submit answer', e)
     err.value = e?.data ? JSON.stringify(e.data) : (e?.message || 'Failed to submit answer')
@@ -179,7 +188,10 @@ function goToReview () {
 
 const progressLabel = computed(() => {
   if (!totalQuestions.value) return ''
-  const currentIndex = Math.min(answeredCount.value + (currentQuestion.value ? 1 : 0), totalQuestions.value)
+  const currentIndex = Math.min(
+    answeredCount.value + (currentQuestion.value ? 1 : 0),
+    totalQuestions.value
+  )
   return `Question ${currentIndex} of ${totalQuestions.value}`
 })
 </script>
@@ -269,6 +281,8 @@ const progressLabel = computed(() => {
         <div>
           {{ progressLabel }}
         </div>
+        <!-- attempt.score_percent is not returned by next/ currently,
+             so this block will usually be hidden; left in case you add it later -->
         <div v-if="attempt?.score_percent != null">
           Current score: <b>{{ attempt.score_percent }}%</b>
         </div>
@@ -336,7 +350,7 @@ const progressLabel = computed(() => {
           </button>
         </div>
 
-        <!-- Feedback (immediate feedback modules) -->
+        <!-- Feedback (immediate feedback from submit/ endpoint) -->
         <div
           v-if="feedback"
           class="mt-2 text-sm"

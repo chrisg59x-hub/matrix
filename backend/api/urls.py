@@ -72,16 +72,16 @@ urlpatterns = [
     # Quiz / module attempt engine (per-question flow)
     # -------------------------------------------------------------------------
     # Start a module attempt → returns attempt_id + served questions
-    path(
-        "modules/<uuid:module_id>/attempt/start/",
-        views.start_module_attempt,
-        name="start-module-attempt",
-    ),
+    #path(
+    #    "modules/<uuid:module_id>/attempt/start/",
+    #    views.start_module_attempt,
+    #    name="start-module-attempt",
+    #),
     # Optional alias kept for backwards compatibility
-    path(
-        "modules/<uuid:module_id>/start/",
-        views.start_module_attempt,
-    ),
+    #path(
+    #    "modules/<uuid:module_id>/start/",
+    #    views.start_module_attempt,
+    #),
 
     # Per-question navigation
     path(

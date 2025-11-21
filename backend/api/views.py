@@ -14,6 +14,7 @@ from django.db import models
 from django.db.models import Sum, Q, Exists, OuterRef, IntegerField, Value, Avg, Count
 from drf_spectacular.utils import extend_schema    #, OpenApiParameter
 from rest_framework.decorators import api_view, permission_classes, action
+from rest_framework import viewsets, status
 from accounts.models import Org, User
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -258,9 +259,6 @@ class ModuleViewSet(viewsets.ModelViewSet):
         today = timezone.localdate()
         now = timezone.now()
 
-        # Base queryset of unresolved recert requirements for this user,
-        # tied to the SAME org as the module (OuterRef("org")),
-        # and matching either the module's skill OR module's SOP.
         base_reqs = (
             RecertRequirement.objects
             .filter(
@@ -274,17 +272,11 @@ class ModuleViewSet(viewsets.ModelViewSet):
             )
         )
 
-        # The “next” requirement (soonest due, regardless of overdue or not)
         upcoming_reqs = base_reqs.order_by("due_date", "due_at")
-
-        # Only overdue requirements, for is_overdue
         overdue_reqs = base_reqs.filter(
             Q(due_date__lt=today) | Q(due_at__lte=now)
         )
 
-        # Annotate each module:
-        #   - due_at / due_date: earliest requirement
-        #   - is_overdue: does any overdue requirement exist?
         qs = qs.annotate(
             due_at=models.Subquery(upcoming_reqs.values("due_at")[:1]),
             due_date=models.Subquery(upcoming_reqs.values("due_date")[:1]),
@@ -299,11 +291,14 @@ class ModuleViewSet(viewsets.ModelViewSet):
             qs = qs.filter(is_overdue=True)
 
         return qs
-    
-    @action(detail=True, methods=["get","post"], url_path="start", permission_classes=[IsAuthenticated])
+
+    @action(
+        detail=True,
+        methods=["get"],
+        url_path="stats",
+        permission_classes=[IsAuthenticated],
+    )
     def stats(self, request, pk=None):
-        print("START AUTH HEADER:", request.META.get("HTTP_AUTHORIZATION"))
-        print("START USER:", request.user, request.user.is_authenticated)
         """
         Simple stats for a single module:
         - total attempts
@@ -313,7 +308,6 @@ class ModuleViewSet(viewsets.ModelViewSet):
         - timestamps for last attempt / last pass
         """
         module = self.get_object()
-
         qs = ModuleAttempt.objects.filter(module=module)
 
         total_attempts = qs.count()
@@ -343,12 +337,28 @@ class ModuleViewSet(viewsets.ModelViewSet):
             "last_attempt": last_attempt,
             "last_pass": last_pass,
         }
-
-        # If you want Swagger to know about it:
-        # from .serializers import ModuleStatsSerializer
-        # return Response(ModuleStatsSerializer(payload).data)
-
         return Response(payload)
+
+    @action(
+        detail=True,
+        methods=["post"],
+        url_path="start",
+        permission_classes=[IsAuthenticated],
+    )
+    def start(self, request, pk=None):
+        """
+        Start a quiz attempt for this module via:
+          POST /api/modules/<id>/start/
+        """
+        module = self.get_object()
+
+        # Optional debug if needed:
+        # print("START AUTH HEADER:", request.META.get("HTTP_AUTHORIZATION"))
+        # print("START USER:", request.user, request.user.is_authenticated)
+
+        payload = _start_module_attempt_core(request, module)
+        return Response(payload, status=status.HTTP_200_OK)
+
 
 class ModuleAttemptViewSet(viewsets.ModelViewSet):
     queryset = ModuleAttempt.objects.select_related("module", "user")
@@ -1167,25 +1177,15 @@ def my_overdue_sops(request):
 
 
 
-@extend_schema(
-    responses=StartAttemptSerializer,
-    description="Start a quiz attempt: backend selects & shuffles questions/choices. Returns attempt_id and the served questions.",
-)
-@api_view(["POST"])
-@permission_classes([permissions.IsAuthenticated])
-def start_module_attempt(request, module_id: str):
+# --- Helper: core attempt-start logic (NO DRF decorators) ------------------
+def _start_module_attempt_core(request, module: Module):
     """
-    Gated by SOP view completion (if module.require_viewed).
-    Randomises question pool and choice order; stores them on the attempt.
+    Shared logic to start a module attempt.
+
+    Used by both:
+      - API function start_module_attempt (for /modules/<id>/start-module/)
+      - ModuleViewSet.start action (for /modules/<id>/start/)
     """
-    # helpful debug if needed
-    # print("start_module_attempt called with module_id =", module_id)
-
-    try:
-        module = Module.objects.get(id=module_id)
-    except Module.DoesNotExist:
-        raise ValidationError("Module not found. Check the ID being sent from the frontend.")
-
     if not module.active:
         raise ValidationError("This module is inactive and cannot be started.")
 
@@ -1228,21 +1228,23 @@ def start_module_attempt(request, module_id: str):
     )
 
     # Serialize questions in the chosen order (without exposing is_correct)
-    # Reorder choices to match choice_order
     public_questions = []
     for q in qs:
         ordered_ids = choice_order[str(q.id)]
-        ordered_choices = [c for cid in ordered_ids for c in q.choices.all() if str(c.id) == cid]
+        all_choices = list(q.choices.all())
+        ordered_choices = [
+            c for cid in ordered_ids for c in all_choices if str(c.id) == cid
+        ]
         # hint serializer to use the ordered choices
         q._prefetched_objects_cache = {"choices": ordered_choices}
         public_questions.append(q)
 
-    payload = {
-        "attempt_id": attempt.id,
-        "module_id": module.id,
+    return {
+        "attempt_id": str(attempt.id),
+        "module_id": str(module.id),
         "questions": QuestionPublicSerializer(public_questions, many=True).data,
     }
-    return response.Response(payload, status=status.HTTP_200_OK)
+
 
 @extend_schema(
     responses=NextQuestionSerializer,
