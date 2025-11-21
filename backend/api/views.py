@@ -1183,8 +1183,8 @@ def _start_module_attempt_core(request, module: Module):
     Shared logic to start a module attempt.
 
     Used by both:
-      - API function start_module_attempt (for /modules/<id>/start-module/)
-      - ModuleViewSet.start action (for /modules/<id>/start/)
+      - ModuleViewSet.start ( /api/modules/<id>/start/ )
+      - start_module_attempt function ( /api/modules/<module_id>/start-module/ )
     """
     if not module.active:
         raise ValidationError("This module is inactive and cannot be started.")
@@ -1194,7 +1194,7 @@ def _start_module_attempt_core(request, module: Module):
         viewed_ok = SOPView.objects.filter(
             sop_id=module.sop_id,
             user=request.user,
-            completed=True
+            completed=True,
         ).exists()
         if not viewed_ok:
             raise PermissionDenied("Please view the SOP media before starting the quiz.")
@@ -1210,7 +1210,7 @@ def _start_module_attempt_core(request, module: Module):
     if module.shuffle_questions:
         random.shuffle(qs)
 
-    # Build deterministic choice order per question (possibly shuffled)
+    # Build deterministic choice order per question
     choice_order = {}
     for q in qs:
         choices = list(q.choices.all())
@@ -1222,7 +1222,7 @@ def _start_module_attempt_core(request, module: Module):
     attempt = ModuleAttempt.objects.create(
         user=request.user,
         module=module,
-        answers={},  # will fill on submit
+        answers={},
         presented_questions=[str(q.id) for q in qs],
         choice_order=choice_order,
     )
@@ -1246,44 +1246,21 @@ def _start_module_attempt_core(request, module: Module):
     }
 
 
+# --- Optional standalone endpoint ------------------------------------------
 @extend_schema(
-    responses=NextQuestionSerializer,
-    description="Get the next unanswered question for an attempt, based on presented_questions."
+    responses=StartAttemptSerializer,
+    description="Start a quiz attempt: backend selects & shuffles questions/choices. Returns attempt_id and the served questions.",
 )
-@decorators.api_view(["GET"])
-@decorators.permission_classes([permissions.IsAuthenticated])
-def next_question(request, attempt_id: str):
-    try:
-        attempt = ModuleAttempt.objects.select_related("module").get(
-            id=attempt_id, user=request.user
-        )
-    except ModuleAttempt.DoesNotExist:
-        raise ValidationError("Attempt not found.")
+@api_view(["POST"])
+@permission_classes([permissions.IsAuthenticated])
+def start_module_attempt(request, module_id: str):
+    """
+    Standalone endpoint:
 
-    q, remaining, total = _get_next_unanswered_question(attempt)
-
-    if not q:
-        # No more questions
-        payload = {
-            "attempt_id": attempt.id,
-            "question": None,
-            "remaining": 0,
-            "total": total,
-        }
-        return response.Response(payload, status=status.HTTP_200_OK)
-
-    # Respect stored choice order from attempt.choice_order
-    choice_order = attempt.choice_order or {}
-    ordered_ids = choice_order.get(str(q.id)) or [str(c.id) for c in q.choices.all()]
-    ordered_choices = [c for cid in ordered_ids for c in q.choices.all() if str(c.id) == cid]
-    q._prefetched_objects_cache = {"choices": ordered_choices}
-
-    payload = {
-        "attempt_id": attempt.id,
-        "question": QuestionPublicSerializer(q).data,
-        "remaining": remaining,
-        "total": total,
-    }
+      POST /api/modules/<module_id>/start-module/
+    """
+    module = get_object_or_404(Module, id=module_id)
+    payload = _start_module_attempt_core(request, module)
     return response.Response(payload, status=status.HTTP_200_OK)
 
 @extend_schema(responses=SOPViewSerializer(many=True))

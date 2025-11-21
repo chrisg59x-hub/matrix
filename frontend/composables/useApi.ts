@@ -1,75 +1,52 @@
-// frontend/composables/useApi.ts
-type HttpMethod = 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE'
-
-export function useApi () {
+// composables/useApi.ts
+export function useApi() {
   const config = useRuntimeConfig()
-  // use your existing auth composable (auto-imported by Nuxt)
+  const baseURL = config.public.apiBase
   const auth = useAuth()
 
-  const baseURL =
-    (config.public.apiBase as string | undefined) ||
-    'http://127.0.0.1:8000/api'
+  async function request<T = any>(
+    method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE',
+    url: string,
+    body?: any,
+    opts: any = {},
+  ): Promise<T> {
+    const headers: Record<string, string> = {}
 
-  async function request (
-    path: string,
-    options: {
-      method?: HttpMethod
-      query?: any
-      body?: any
-      headers?: Record<string, string>
-    } = {}
-  ) {
-    const url = baseURL + path
-
-    // auth.token from your composable: it’s a Ref<string | null>
-    const rawToken = (auth as any).token
-    const token =
-      typeof rawToken === 'string'
-        ? rawToken
-        : rawToken?.value ?? null
-
-    const headers: Record<string, string> = {
-      ...(options.headers || {}),
+    // Attach JSON header unless it's FormData
+    if (body !== undefined && !(body instanceof FormData)) {
+      headers['Content-Type'] = 'application/json'
     }
 
+    const token = auth.token?.value
     if (token) {
-      headers.Authorization = `Bearer ${token}`
+      headers['Authorization'] = `Bearer ${token}`
     }
 
-    return await $fetch(url, {
-      method: options.method || 'GET',
+    return await $fetch<T>(url, {
+      baseURL,
+      method,
+      body,
       headers,
-      query: options.query,
-      body: options.body,
+      ...opts,
     })
   }
 
-  function get (path: string, query?: any) {
-    return request(path, { method: 'GET', query })
-  }
-
-  function post (path: string, body?: any) {
-    return request(path, { method: 'POST', body })
-  }
-
-  function put (path: string, body?: any) {
-    return request(path, { method: 'PUT', body })
-  }
-
-  function patch (path: string, body?: any) {
-    return request(path, { method: 'PATCH', body })
-  }
-
-  function del (path: string, body?: any) {
-    return request(path, { method: 'DELETE', body })
-  }
-
   return {
-    request,
-    get,
-    post,
-    put,
-    patch,
-    del,
+    get<T = any>(url: string, opts?: any) {
+      return request<T>('GET', url, undefined, opts)
+    },
+    post<T = any>(url: string, body?: any, opts?: any) {
+      return request<T>('POST', url, body, opts)
+    },
+    put<T = any>(url: string, body?: any, opts?: any) {
+      return request<T>('PUT', url, body, opts)
+    },
+    patch<T = any>(url: string, body?: any, opts?: any) {
+      return request<T>('PATCH', url, body, opts)
+    },
+    del<T = any>(url: string, opts?: any) {
+      return request<T>('DELETE', url, undefined, opts)
+    },
   }
 }
+

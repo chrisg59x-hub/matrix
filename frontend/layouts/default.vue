@@ -307,7 +307,7 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 const auth = useAuth()
 const route = useRoute()
 const mobileMenu = ref(false)
@@ -325,7 +325,6 @@ const mainLinks = [
   { to: '/sops', label: 'SOPs', icon: 'i-lucide-file-text' },
   { to: '/training/overdue', label: 'My Overdue Training', icon: 'i-lucide-alarm-clock' },
 
-  // NEW “Me” links
   { to: '/me/progress', label: 'My Progress', icon: 'i-lucide-gauge' },
   { to: '/me/attempts', label: 'My Attempts', icon: 'i-lucide-clipboard-list' },
   { to: '/me/badges', label: 'My Badges', icon: 'i-lucide-award' },
@@ -347,7 +346,7 @@ const systemLinks = [
 ]
 
 const pageTitle = computed(() => {
-  const map = {
+  const map: Record<string, string> = {
     '/': 'Dashboard',
     '/sops': 'SOPs',
     '/training/overdue': 'My Overdue Training',
@@ -369,7 +368,7 @@ const pageTitle = computed(() => {
   return map[route.path] || 'Matrix'
 })
 
-function linkClasses (path) {
+function linkClasses (path: string) {
   const isActive =
     route.path === path ||
     (path !== '/' && route.path.startsWith(path + '/'))
@@ -387,30 +386,40 @@ function logout () {
   navigateTo('/login')
 }
 
-// Fetch overdue count whenever user is logged in / changes
 async function refreshOverdueCount () {
   try {
-    if (!auth.loggedIn) {
+    // 🔑 loggedIn is a ref, so use .value here
+    if (!auth.loggedIn.value) {
       overdueCount.value = 0
       return
     }
+
     const { get } = useApi()
     const data = await get('/me/overdue-sops/')
     const list = Array.isArray(data) ? data : (data.results || [])
     overdueCount.value = list.length
-  } catch {
+  } catch (e) {
+    // 401 and any other error just reset the badge
     overdueCount.value = 0
   }
 }
 
+// Only fetch on mount if we’re already logged in (e.g. token in state)
 onMounted(() => {
-  refreshOverdueCount()
+  if (auth.loggedIn.value) {
+    refreshOverdueCount()
+  }
 })
 
+// And react to login/logout changes
 watch(
-  () => auth.loggedIn,
-  () => {
-    refreshOverdueCount()
+  () => auth.loggedIn.value,
+  (isLoggedIn) => {
+    if (isLoggedIn) {
+      refreshOverdueCount()
+    } else {
+      overdueCount.value = 0
+    }
   }
 )
 </script>

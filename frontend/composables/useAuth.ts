@@ -1,55 +1,69 @@
-// composables/useAuth.ts
-type TokenResp = { access: string; refresh?: string }
-type Me = { username: string; biz_role: string | null }
+// frontend/composables/useAuth.ts
+import { useApi } from './useApi'
 
-export function useAuth() {
-  const { post, get } = useApi()
-  const token = useState<string | null>('token', () =>
-    process.client ? localStorage.getItem('token') : null
-  )
-  const refresh = useState<string | null>('refresh', () =>
-    process.client ? localStorage.getItem('refresh') : null
-  )
-  const user = useState<Me | null>('user', () => null)
-  const loading = useState<boolean>('authLoading', () => false)
-  const error = useState<string | null>('authError', () => null)
-  const loggedIn = computed(() => !!token.value)
+type Me = {
+  id: number
+  username: string
+  email?: string
+  biz_role?: string
+}
 
-  async function login(username: string, password: string) {
+type TokenResp = {
+  access: string
+  refresh: string
+}
+
+export function useAuth () {
+  const token   = useState<string | null>('auth-token',   () => null)
+  const refresh = useState<string | null>('auth-refresh', () => null)
+  const user    = useState<Me | null>('auth-user',        () => null)
+  const loading = useState<boolean>('auth-loading',       () => false)
+  const error   = useState<string | null>('auth-error',   () => null)
+
+  const { get, post } = useApi()
+
+  async function login (username: string, password: string) {
+    loading.value = true
+    error.value = null
+
     try {
-      loading.value = true
-      error.value = null
-      const t = await post<TokenResp>('/auth/token/', { username, password })
+      // ✅ This must match the backend route: /api/token/
+      const t = await post<TokenResp>('/token/', { username, password })
+
       token.value = t.access
-      if (t.refresh) refresh.value = t.refresh
+      refresh.value = t.refresh
+
       if (process.client) {
-        localStorage.setItem('token', t.access)
-        if (t.refresh) localStorage.setItem('refresh', t.refresh)
+        localStorage.setItem('auth-token', t.access)
+        localStorage.setItem('auth-refresh', t.refresh)
       }
-      await me()
+
+      // Load current user
+      const me = await get<Me>('/me/whoami/')
+      user.value = me
     } catch (e: any) {
-      error.value = e?.data?.detail || 'Login failed'
+      console.error('Auth login error', e)
+      error.value = e?.data?.detail || e?.message || 'Login failed'
       throw e
     } finally {
       loading.value = false
     }
   }
 
-  async function me() {
-    const m = await get<Me>('/me/whoami/')
-    user.value = m
-    return m
-  }
-
-  function logout() {
+  function logout () {
     token.value = null
     refresh.value = null
     user.value = null
+
     if (process.client) {
-      localStorage.removeItem('token')
-      localStorage.removeItem('refresh')
+      localStorage.removeItem('auth-token')
+      localStorage.removeItem('auth-refresh')
     }
+
+    navigateTo('/login')
   }
 
-  return { token, refresh, user, loading, error, login, loggedIn, logout, me }
+  const loggedIn = computed(() => !!token.value)
+
+  return { token, refresh, user, loading, error, login, logout, loggedIn }
 }

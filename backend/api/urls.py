@@ -1,5 +1,6 @@
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
+from rest_framework_simplejwt.views import TokenObtainPairView, TokenRefreshView
 
 from . import views
 from .views import debug_auth
@@ -26,10 +27,13 @@ router.register(r"teams", views.TeamViewSet)
 router.register(r"team-members", views.TeamMemberViewSet)
 router.register(r"role-assignments", views.RoleAssignmentViewSet)
 router.register(r"training-pathways", views.TrainingPathwayViewSet)
+path("token/", TokenObtainPairView.as_view(), name="token_obtain_pair"),
+path("token/refresh/", TokenRefreshView.as_view(), name="token_refresh"),
 
 urlpatterns = [
     # All the router-driven viewsets:
     path("", include(router.urls)),
+    path("api/", include("api.urls")),
 
     # -------------------------------------------------------------------------
     # Me / progress / dashboards
