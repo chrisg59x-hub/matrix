@@ -11,8 +11,6 @@ export function useApi() {
     process.client ? localStorage.getItem('refresh') : null
   )
 
-  const authHeaders = () => (token.value ? { Authorization: `Bearer ${token.value}` } : {})
-
   async function refreshTokenOnce(): Promise<boolean> {
     if (!refresh.value) return false
     try {
@@ -40,13 +38,23 @@ export function useApi() {
     }
   }
 
-  async function request<T>(method: 'GET' | 'POST', url: string, body?: any): Promise<T> {
+  async function request<T>(method: 'GET' | 'POST' | 'PATCH' | 'DELETE', url: string, body?: any): Promise<T> {
+    const headers: Record<string, string> = {
+      'Content-Type': 'application/json',
+    }
+
+    if (token.value) {
+      headers.Authorization = `Bearer ${token.value}`
+    }
+    console.log('API request', method, url, headers)  // 👈 add this
+    console.log('API request', method, url, headers)  // 👈 add this
+
     try {
       return await $fetch<T>(url, {
         method,
         baseURL,
         body,
-        headers: { 'Content-Type': 'application/json', ...authHeaders() },
+        headers,
       })
     } catch (e: any) {
       // If unauthorized, try a single refresh -> retry once
@@ -57,7 +65,7 @@ export function useApi() {
             method,
             baseURL,
             body,
-            headers: { 'Content-Type': 'application/json', ...authHeaders() },
+            headers,
           })
         }
       }

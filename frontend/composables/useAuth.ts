@@ -13,6 +13,7 @@ export function useAuth() {
   const user = useState<Me | null>('user', () => null)
   const loading = useState<boolean>('authLoading', () => false)
   const error = useState<string | null>('authError', () => null)
+  const loggedIn = computed(() => !!token.value)
 
   async function login(username: string, password: string) {
     try {
@@ -50,5 +51,5 @@ export function useAuth() {
     }
   }
 
-  return { token, refresh, user, loading, error, login, logout, me }
+  return { token, refresh, user, loading, error, login, loggedIn, logout, me }
 }

@@ -4,7 +4,6 @@ const route = useRoute()
 const router = useRouter()
 const { get, post } = useApi()
 const auth = useAuth()
-
 const moduleId = computed(() => route.params.id as string)
 
 const loading = ref(true)
@@ -12,10 +11,20 @@ const error = ref<string | null>(null)
 const starting = ref(false)
 const moduleData = ref<any | null>(null)
 
+import { watchEffect } from 'vue'
+
+
+
+watchEffect(() => {
+  console.log('auth.loggedIn.value', auth.loggedIn.value, 'token', auth.token.value)
+})
+
 // Load module details
 onMounted(loadModule)
 
 async function loadModule () {
+  const data = await get('/debug-auth/')
+  console.log('debug-auth response', data)
   loading.value = true
   error.value = null
   try {
@@ -32,8 +41,8 @@ async function loadModule () {
 
 // Start training using the SAME endpoint/logic as demo.vue
 async function startTraining () {
-  // Require login (frontend) before we even call the API
-  if (!auth.loggedIn) {
+  // loggedIn is a computed ref, so in script you need .value
+  if (!auth.loggedIn.value) {
     router.push(`/login?next=${encodeURIComponent(route.fullPath)}`)
     return
   }
@@ -42,31 +51,23 @@ async function startTraining () {
   error.value = null
 
   try {
-    // This must be a POST and must go through useApi()
     const data: any = await post(`/modules/${moduleId.value}/start/`, {})
 
-    // Accept either { attempt_id: "…" } or { id: "…" } or nested
-    const attemptId =
-      data?.attempt_id ||
-      data?.id ||
-      data?.attempt?.id
-
+    const attemptId = data?.attempt_id || data?.id || data?.attempt?.id
     if (!attemptId) {
       throw new Error('No attempt_id returned from /modules/:id/start/')
     }
 
-    // Navigate to the per-attempt quiz page
     await router.push(`/modules/${moduleId.value}/attempt/${attemptId}`)
   } catch (e: any) {
-    // If auth is missing/invalid, you'll see:
-    // {"detail": "Authentication credentials were not provided."}
     error.value = e?.data
-      ? JSON.stringify(e.data)
+      ? JSON.stringify(e.data, null, 2)
       : (e?.message || 'Failed to start attempt')
   } finally {
     starting.value = false
   }
 }
+
 
 function difficultyLabel (n?: number | null) {
   if (n == null) return 'Not set'

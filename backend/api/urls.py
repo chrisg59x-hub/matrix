@@ -2,6 +2,7 @@ from django.urls import path, include
 from rest_framework.routers import DefaultRouter
 
 from . import views
+from .views import debug_auth
 
 router = DefaultRouter()
 
@@ -33,6 +34,7 @@ urlpatterns = [
     # -------------------------------------------------------------------------
     # Me / progress / dashboards
     # -------------------------------------------------------------------------
+    path("debug-auth/", debug_auth),
     path("my-progress/", views.my_progress, name="my-progress"),
     path("my_progress/", views.my_progress, name="my-progress-underscore"),
 

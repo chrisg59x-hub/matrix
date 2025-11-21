@@ -36,10 +36,11 @@ from learning.models import (
     UserBadge,
     XPEvent,
 )
+
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import decorators, permissions, response, status, viewsets, filters, generics
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.exceptions import PermissionDenied, ValidationError
@@ -92,6 +93,15 @@ from .serializers import (
     XPEventSerializer,
 )
 
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def debug_auth(request):
+    return Response({
+        "user": getattr(request.user, "username", None),
+        "is_authenticated": bool(getattr(request.user, "is_authenticated", False)),
+        "auth": str(getattr(request, "auth", None)),
+        "auth_header": request.META.get("HTTP_AUTHORIZATION"),
+    })
 # -----------------------------------------------------------------------------
 # 5) Basic CRUD ViewSets (standard DRF)
 # -----------------------------------------------------------------------------
@@ -224,7 +234,7 @@ class RoleSkillViewSet(viewsets.ModelViewSet):
 class ModuleViewSet(viewsets.ModelViewSet):
     queryset = Module.objects.select_related("skill", "sop")
     serializer_class = ModuleSerializer
-    permission_classes = [IsManagerForWrites]
+    permission_classes = [IsAuthenticated]
 
     def get_queryset(self):
         qs = super().get_queryset()
@@ -290,8 +300,10 @@ class ModuleViewSet(viewsets.ModelViewSet):
 
         return qs
     
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get","post"], url_path="start", permission_classes=[IsAuthenticated])
     def stats(self, request, pk=None):
+        print("START AUTH HEADER:", request.META.get("HTTP_AUTHORIZATION"))
+        print("START USER:", request.user, request.user.is_authenticated)
         """
         Simple stats for a single module:
         - total attempts
